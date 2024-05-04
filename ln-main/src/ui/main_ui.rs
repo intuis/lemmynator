@@ -1,7 +1,10 @@
 use std::{
     io::{BufReader, Cursor, Read},
     rc::Rc,
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
 };
 
 use crate::{
@@ -11,7 +14,6 @@ use crate::{
 
 use super::components::{tabs::TabComponent, Component};
 
-use bytes::Buf;
 use lemmy_api_common::{
     lemmy_db_schema::{ListingType, SortType},
     lemmy_db_views::structs::{PaginationCursor, PostView},
@@ -22,7 +24,6 @@ use ratatui::{
     widgets::{Block, Paragraph, Wrap},
 };
 use ratatui_image::{picker::Picker, protocol::StatefulProtocol, StatefulImage};
-use reqwest::Client;
 
 pub struct MainWindow {
     tabs: TabComponent,
@@ -124,6 +125,7 @@ struct Page {
     posts_offset: usize,
     currently_focused: u8,
     currently_displaying: u8,
+    can_fetch_new_pages: Arc<AtomicBool>,
     ctx: Arc<Ctx>,
 }
 
@@ -160,6 +162,7 @@ impl Page {
             posts_offset: 0,
             currently_focused: 0,
             currently_displaying: 0,
+            can_fetch_new_pages: Arc::new(AtomicBool::new(true)),
             ctx: Arc::clone(&ctx),
         }
     }
@@ -167,6 +170,7 @@ impl Page {
     async fn fetch_next_page(
         cursor: Arc<Mutex<PaginationCursor>>,
         posts: Arc<Mutex<Vec<LemmynatorPost>>>,
+        atomic_lock: Arc<AtomicBool>,
         ctx: Arc<Ctx>,
     ) {
         // TODO: shoot an action of render from Ctx
@@ -194,6 +198,7 @@ impl Page {
 
         posts.lock().unwrap().append(&mut new_posts);
         *cursor.lock().unwrap() = page.next_page.unwrap();
+        atomic_lock.store(true, Ordering::SeqCst);
     }
 
     fn scroll_up(&mut self) {
@@ -251,11 +256,19 @@ impl Component for Page {
                     Some(post) => post,
                     None => {
                         drop(posts_lock);
-                        tokio::task::spawn(Self::fetch_next_page(
-                            Arc::clone(&self.next_page),
-                            Arc::clone(&self.posts),
-                            Arc::clone(&self.ctx),
-                        ));
+                        if let Ok(true) = self.can_fetch_new_pages.compare_exchange(
+                            true,
+                            false,
+                            Ordering::SeqCst,
+                            Ordering::SeqCst,
+                        ) {
+                            tokio::task::spawn(Self::fetch_next_page(
+                                Arc::clone(&self.next_page),
+                                Arc::clone(&self.posts),
+                                Arc::clone(&self.can_fetch_new_pages),
+                                Arc::clone(&self.ctx),
+                            ));
+                        }
                         break;
                     }
                 }
