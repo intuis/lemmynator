@@ -21,7 +21,10 @@ use lemmy_api_common::{
 };
 use ratatui::{
     prelude::*,
-    widgets::{Block, Paragraph, Wrap},
+    widgets::{
+        block::{Position, Title},
+        Block, BorderType, Paragraph, Wrap,
+    },
 };
 use ratatui_image::{picker::Picker, protocol::StatefulProtocol, StatefulImage};
 
@@ -286,9 +289,27 @@ struct LemmynatorPost {
     body: Option<String>,
     is_focused: bool,
     decoded_image: Arc<Mutex<Option<Box<dyn StatefulProtocol>>>>,
+    embed_description: Option<String>,
+    embed_url: Option<String>,
+    author: String,
+    community: String,
+    downvotes: i64,
+    comments: i64,
+    upvotes: i64,
 }
 
 impl LemmynatorPost {
+    fn header(&self) -> String {
+        format!(" {} ", self.name)
+    }
+
+    fn footer_right(&self) -> String {
+        format!(
+            " c/{}  u/{}   {}  {}  󰆉 {} ",
+            self.community, self.author, self.upvotes, self.downvotes, self.comments
+        )
+    }
+
     async fn fetch_image(
         url: String,
         image: Arc<Mutex<Option<Box<dyn StatefulProtocol>>>>,
@@ -330,11 +351,23 @@ impl LemmynatorPost {
             ));
         }
 
+        let embed_url = lemmy_post
+            .post
+            .url
+            .and_then(|db_url| Some(db_url.to_string()));
+
         LemmynatorPost {
             name: lemmy_post.post.name,
             body: lemmy_post.post.body,
+            community: lemmy_post.community.name,
+            author: lemmy_post.creator.name,
+            embed_description: lemmy_post.post.embed_description,
+            embed_url,
             is_focused: false,
             decoded_image,
+            upvotes: lemmy_post.counts.upvotes,
+            downvotes: lemmy_post.counts.downvotes,
+            comments: lemmy_post.counts.comments,
         }
     }
 }
@@ -347,17 +380,23 @@ impl Component for LemmynatorPost {
     fn render(&mut self, f: &mut Frame, rect: Rect) {
         let inner_rect = rect.inner(&Margin::new(1, 1));
 
-        let block_style = {
+        let border_style = {
             if self.is_focused {
-                Style::default().fg(Color::LightBlue)
+                Style::default().fg(Color::Green)
             } else {
                 Style::default()
             }
         };
 
         let block = Block::bordered()
-            .title(self.name.as_str())
-            .style(block_style);
+            .border_type(BorderType::Rounded)
+            .border_style(border_style)
+            .title(Title::from(self.header()).alignment(Alignment::Left))
+            .title(
+                Title::from(self.footer_right())
+                    .alignment(Alignment::Right)
+                    .position(Position::Bottom),
+            );
 
         f.render_widget(block, rect);
 
@@ -377,7 +416,10 @@ impl Component for LemmynatorPost {
         }
 
         if let Some(body) = &self.body {
-            let text = Paragraph::new(body.as_str()).wrap(Wrap { trim: true });
+            let text = Paragraph::new(body.as_str()).wrap(Wrap { trim: false });
+            f.render_widget(text, text_rect);
+        } else if let Some(embed_desc) = &self.embed_description {
+            let text = Paragraph::new(embed_desc.as_str()).wrap(Wrap { trim: false });
             f.render_widget(text, text_rect);
         }
 
