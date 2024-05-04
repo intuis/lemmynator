@@ -1,0 +1,28 @@
+[package]
+name = "ln-main"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ln-config = { path = "../ln-config" }
+
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+lemmy_api_common = "0.19"
+reqwest = { version = "0.11", features = ["json"] }
+ureq = "2"
+image = { version = "*", features = ["webp", "png", "gif"] }
+bytes = "*"
+
+# Async
+tokio = { version = "1", features = ["rt", "macros", "sync"] }
+tokio-util = "0.7"
+futures = "0.3"
+
+# TUI
+crossterm = { version = "0.27", features = ["event-stream"] }
+ratatui = "0.26"
+ratatui-image = "0.8"
+tui-input = "0.8"
