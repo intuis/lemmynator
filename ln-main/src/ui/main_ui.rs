@@ -196,6 +196,15 @@ impl Page {
         *cursor.lock().unwrap() = page.next_page.unwrap();
     }
 
+    fn scroll_up(&mut self) {
+        if self.currently_focused == 0 {
+            self.posts_offset -= self.currently_displaying as usize;
+            self.currently_focused = self.currently_displaying - 1;
+        } else {
+            self.currently_focused -= 1;
+        }
+    }
+
     fn scroll_down(&mut self) {
         self.currently_focused += 1;
         if self.currently_focused >= self.currently_displaying {
@@ -212,7 +221,10 @@ impl Page {
 impl Component for Page {
     fn handle_actions(&mut self, action: Action) -> Option<Action> {
         match action {
-            Action::Up => todo!(),
+            Action::Up => {
+                self.scroll_up();
+                Some(Action::Render)
+            }
             Action::Down => {
                 self.scroll_down();
                 Some(Action::Render)
@@ -318,9 +330,10 @@ impl Component for LemmynatorPost {
 
         f.render_widget(block, rect);
 
-        let [padding, image_rect, text_rect] = Layout::horizontal([
+        let [_, image_rect, _, mut text_rect] = Layout::horizontal([
             Constraint::Length(1),
-            Constraint::Length(10),
+            Constraint::Length(20),
+            Constraint::Length(1),
             Constraint::Percentage(75),
         ])
         .areas(inner_rect);
@@ -328,6 +341,10 @@ impl Component for LemmynatorPost {
         if let Some(image) = &mut self.decoded_image {
             let image_state = StatefulImage::new(None);
             f.render_stateful_widget(image_state, image_rect, image);
+        }
+
+        if self.decoded_image.is_none() {
+            text_rect = inner_rect;
         }
 
         if let Some(body) = &self.body {
