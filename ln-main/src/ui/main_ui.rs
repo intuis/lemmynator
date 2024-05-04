@@ -285,21 +285,22 @@ struct LemmynatorPost {
     name: String,
     body: Option<String>,
     is_focused: bool,
-    decoded_image: Option<Box<dyn StatefulProtocol>>,
+    decoded_image: Arc<Mutex<Option<Box<dyn StatefulProtocol>>>>,
 }
 
 impl LemmynatorPost {
-    async fn from_lemmy_post(lemmy_post: PostView, ctx: Arc<Ctx>) -> Self {
-        let image = {
-            if let Some(thumbnail_url) = lemmy_post.post.thumbnail_url {
-                let res = ctx.client.get(thumbnail_url.as_str()).send().await.unwrap();
-                Some(res.bytes().await.unwrap())
-            } else {
-                None
-            }
+    async fn fetch_image(
+        url: String,
+        image: Arc<Mutex<Option<Box<dyn StatefulProtocol>>>>,
+        ctx: Arc<Ctx>,
+    ) {
+        // TODO: Send render Action via ctx
+        let new_image = {
+            let res = ctx.client.get(url).send().await.unwrap();
+            Some(res.bytes().await.unwrap())
         };
 
-        let image = if let Some(image) = image {
+        let new_image = if let Some(image) = new_image {
             let dyn_image_res = image::io::Reader::new(Cursor::new(image))
                 .with_guessed_format()
                 .unwrap()
@@ -312,11 +313,28 @@ impl LemmynatorPost {
         } else {
             None
         };
+
+        if let Some(new_image) = new_image {
+            *image.lock().unwrap() = Some(new_image);
+        }
+    }
+
+    async fn from_lemmy_post(lemmy_post: PostView, ctx: Arc<Ctx>) -> Self {
+        let decoded_image = Arc::new(Mutex::new(None));
+
+        if let Some(url) = lemmy_post.post.thumbnail_url {
+            tokio::task::spawn(Self::fetch_image(
+                url.as_str().to_string(),
+                Arc::clone(&decoded_image),
+                Arc::clone(&ctx),
+            ));
+        }
+
         LemmynatorPost {
             name: lemmy_post.post.name,
             body: lemmy_post.post.body,
             is_focused: false,
-            decoded_image: image,
+            decoded_image,
         }
     }
 }
@@ -351,12 +369,10 @@ impl Component for LemmynatorPost {
         ])
         .areas(inner_rect);
 
-        if let Some(image) = &mut self.decoded_image {
+        if let Some(image) = &mut *self.decoded_image.lock().unwrap() {
             let image_state = StatefulImage::new(None);
             f.render_stateful_widget(image_state, image_rect, image);
-        }
-
-        if self.decoded_image.is_none() {
+        } else {
             text_rect = inner_rect;
         }
 
