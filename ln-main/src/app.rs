@@ -30,6 +30,7 @@ pub struct App {
 }
 
 pub struct Ctx {
+    pub action_tx: UnboundedSender<Action>,
     pub client: Client,
     pub picker: Mutex<Picker>,
 }
@@ -70,6 +71,7 @@ impl App {
         picker.guess_protocol();
 
         let ctx = Arc::new(Ctx {
+            action_tx: action_tx.clone(),
             client,
             picker: Mutex::new(picker),
         });

@@ -1,5 +1,6 @@
 pub mod components;
 pub mod main_ui;
+mod page;
 
 use ratatui::prelude::*;
 
