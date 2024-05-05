@@ -32,7 +32,7 @@ impl Page {
     pub async fn new(listing_type: ListingType, ctx: Arc<Ctx>) -> Self {
         let local_posts_req = GetPosts {
             type_: Some(listing_type),
-            limit: Some(20),
+            limit: Some(10),
             sort: Some(SortType::Hot),
             ..Default::default()
         };
