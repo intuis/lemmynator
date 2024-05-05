@@ -1,5 +1,6 @@
 use std::{
     rc::Rc,
+    str::FromStr,
     sync::{Arc, Mutex},
 };
 
@@ -9,7 +10,10 @@ use lemmy_api_common::{
 };
 use ln_config::Config;
 use ratatui_image::picker::Picker;
-use reqwest::Client;
+use reqwest::{
+    header::{HeaderMap, HeaderValue},
+    Client,
+};
 
 use crate::{
     action::{event_to_action, Action, Mode},
@@ -60,6 +64,15 @@ impl App {
             .await?
             .json()
             .await?;
+
+        let mut header_map = HeaderMap::new();
+        header_map.insert(
+            reqwest::header::AUTHORIZATION,
+            HeaderValue::from_str(&format!("Bearer {}", res.jwt.as_ref().unwrap().to_string()))
+                .unwrap(),
+        );
+        let client = Client::builder().user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+            .default_headers(header_map).build().unwrap();
 
         let user_info = Rc::new(UserInfo {
             instance: config.connection.instance,

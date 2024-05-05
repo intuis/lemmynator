@@ -46,7 +46,8 @@ impl Component for TabComponent {
                 2 => self.current_tab = CurrentTab::Local,
                 3 => self.current_tab = CurrentTab::All,
                 _ => (),
-            }
+            };
+            return Some(Action::Render);
         }
         None
     }

@@ -6,7 +6,10 @@ use crate::{
 };
 
 use super::{
-    components::{tabs::TabComponent, Component},
+    components::{
+        tabs::{CurrentTab, TabComponent},
+        Component,
+    },
     page::Page,
 };
 
@@ -14,7 +17,6 @@ use lemmy_api_common::lemmy_db_schema::ListingType;
 use ratatui::prelude::*;
 
 pub struct MainWindow {
-    tabs: TabComponent,
     posts_viewer: PostsComponent,
     ctx: Arc<Ctx>,
 }
@@ -22,7 +24,6 @@ pub struct MainWindow {
 impl MainWindow {
     pub async fn new(user_info: Rc<UserInfo>, ctx: Arc<Ctx>) -> Self {
         Self {
-            tabs: TabComponent::new(),
             posts_viewer: PostsComponent::new(user_info, Arc::clone(&ctx)).await,
             ctx: Arc::clone(&ctx),
         }
@@ -32,6 +33,46 @@ impl MainWindow {
 impl Component for MainWindow {
     fn handle_actions(&mut self, action: Action) -> Option<Action> {
         return self.posts_viewer.handle_actions(action);
+    }
+
+    fn render(&mut self, f: &mut Frame, rect: Rect) {
+        // self.tabs.render(f, tabs_rect);
+        self.posts_viewer.render(f, f.size());
+    }
+}
+
+struct PostsComponent {
+    tabs: TabComponent,
+    user_info: Rc<UserInfo>,
+    subscribed_page: Page,
+    local_page: Page,
+    all_page: Page,
+    ctx: Arc<Ctx>,
+}
+
+impl PostsComponent {
+    async fn new(user_info: Rc<UserInfo>, ctx: Arc<Ctx>) -> Self {
+        Self {
+            tabs: TabComponent::new(),
+            user_info,
+            subscribed_page: Page::new(ListingType::Subscribed, Arc::clone(&ctx)).await,
+            local_page: Page::new(ListingType::Local, Arc::clone(&ctx)).await,
+            all_page: Page::new(ListingType::All, Arc::clone(&ctx)).await,
+            ctx,
+        }
+    }
+}
+
+impl Component for PostsComponent {
+    fn handle_actions(&mut self, action: Action) -> Option<Action> {
+        match action {
+            Action::ChangeTab(_) => self.tabs.handle_actions(action),
+            _ => match self.tabs.current_tab {
+                CurrentTab::Subscribed => self.subscribed_page.handle_actions(action),
+                CurrentTab::Local => self.local_page.handle_actions(action),
+                CurrentTab::All => self.all_page.handle_actions(action),
+            },
+        }
     }
 
     fn render(&mut self, f: &mut Frame, rect: Rect) {
@@ -46,36 +87,11 @@ impl Component for MainWindow {
         .split(main_rect)[1];
 
         self.tabs.render(f, tabs_rect);
-        self.posts_viewer.render(f, posts_rect);
-    }
-}
 
-struct PostsComponent {
-    user_info: Rc<UserInfo>,
-    subscribed_page: Page,
-    local_page: Page,
-    all_page: Page,
-    ctx: Arc<Ctx>,
-}
-
-impl PostsComponent {
-    async fn new(user_info: Rc<UserInfo>, ctx: Arc<Ctx>) -> Self {
-        Self {
-            user_info,
-            subscribed_page: Page::new(ListingType::Subscribed, Arc::clone(&ctx)).await,
-            local_page: Page::new(ListingType::Local, Arc::clone(&ctx)).await,
-            all_page: Page::new(ListingType::All, Arc::clone(&ctx)).await,
-            ctx,
+        match self.tabs.current_tab {
+            CurrentTab::Subscribed => self.subscribed_page.render(f, posts_rect),
+            CurrentTab::Local => self.local_page.render(f, posts_rect),
+            CurrentTab::All => self.all_page.render(f, posts_rect),
         }
-    }
-}
-
-impl Component for PostsComponent {
-    fn handle_actions(&mut self, action: Action) -> Option<Action> {
-        return self.local_page.handle_actions(action);
-    }
-
-    fn render(&mut self, f: &mut Frame, rect: Rect) {
-        self.local_page.render(f, rect);
     }
 }

@@ -40,7 +40,7 @@ impl Page {
         let page = ctx
             .client
             .get("https://slrpnk.net/api/v3/post/list")
-            .json(&local_posts_req)
+            .query(&local_posts_req)
             .send()
             .await
             .unwrap();
