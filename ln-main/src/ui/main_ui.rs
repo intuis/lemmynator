@@ -13,8 +13,8 @@ use super::{
     page::Page,
 };
 
-use lemmy_api_common::lemmy_db_schema::ListingType;
-use ratatui::prelude::*;
+use lemmy_api_common::{lemmy_db_schema::ListingType, person::GetUnreadCountResponse};
+use ratatui::{prelude::*, widgets::Paragraph};
 
 pub struct MainWindow {
     posts_viewer: PostsComponent,
@@ -36,13 +36,13 @@ impl Component for MainWindow {
     }
 
     fn render(&mut self, f: &mut Frame, rect: Rect) {
-        // self.tabs.render(f, tabs_rect);
         self.posts_viewer.render(f, f.size());
     }
 }
 
 struct PostsComponent {
     tabs: TabComponent,
+    top_bar: TopBar,
     user_info: Rc<UserInfo>,
     subscribed_page: Page,
     local_page: Page,
@@ -52,8 +52,19 @@ struct PostsComponent {
 
 impl PostsComponent {
     async fn new(user_info: Rc<UserInfo>, ctx: Arc<Ctx>) -> Self {
+        let unread_counts: GetUnreadCountResponse = ctx
+            .client
+            .get("https://slrpnk.net/api/v3/user/unread_count")
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+
         Self {
             tabs: TabComponent::new(),
+            top_bar: TopBar::new(Arc::clone(&ctx), user_info.user.to_string(), unread_counts).await,
             user_info,
             subscribed_page: Page::new(ListingType::Subscribed, Arc::clone(&ctx)).await,
             local_page: Page::new(ListingType::Local, Arc::clone(&ctx)).await,
@@ -86,6 +97,7 @@ impl Component for PostsComponent {
         ])
         .split(main_rect)[1];
 
+        self.top_bar.render(f, tabs_rect);
         self.tabs.render(f, tabs_rect);
 
         match self.tabs.current_tab {
@@ -93,5 +105,41 @@ impl Component for PostsComponent {
             CurrentTab::Local => self.local_page.render(f, posts_rect),
             CurrentTab::All => self.all_page.render(f, posts_rect),
         }
+    }
+}
+
+struct TopBar {
+    username: String,
+    unread_counts: GetUnreadCountResponse,
+    ctx: Arc<Ctx>,
+}
+
+impl TopBar {
+    async fn new(ctx: Arc<Ctx>, username: String, unread_counts: GetUnreadCountResponse) -> Self {
+        Self {
+            username,
+            ctx,
+            unread_counts,
+        }
+    }
+
+    fn total_unreads(&self) -> i64 {
+        let unread_counts = &self.unread_counts;
+        unread_counts.replies + unread_counts.mentions + unread_counts.private_messages
+    }
+
+    fn menu_text(&self) -> String {
+        format!("{}  {}  ", self.total_unreads(), self.username)
+    }
+}
+
+impl Component for TopBar {
+    fn handle_actions(&mut self, _action: Action) -> Option<Action> {
+        None
+    }
+
+    fn render(&mut self, f: &mut Frame, rect: Rect) {
+        let paragraph = Paragraph::new(self.menu_text()).right_aligned();
+        f.render_widget(paragraph, rect);
     }
 }

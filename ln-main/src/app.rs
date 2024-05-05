@@ -41,15 +41,16 @@ pub struct Ctx {
 
 pub struct UserInfo {
     instance: String,
-    user: Sensitive<String>,
+    pub user: Sensitive<String>,
     jwt: Sensitive<String>,
 }
 
 impl App {
     pub async fn new(config: Config) -> Result<Self> {
         let (action_tx, action_rx) = mpsc::unbounded_channel();
+        let user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
-        let client = Client::builder().user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36").build().unwrap();
+        let client = Client::builder().user_agent(user_agent).build().unwrap();
 
         let login_req = Login {
             username_or_email: Sensitive::new(config.connection.username.clone()),
@@ -71,8 +72,11 @@ impl App {
             HeaderValue::from_str(&format!("Bearer {}", res.jwt.as_ref().unwrap().to_string()))
                 .unwrap(),
         );
-        let client = Client::builder().user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
-            .default_headers(header_map).build().unwrap();
+        let client = Client::builder()
+            .user_agent(user_agent)
+            .default_headers(header_map)
+            .build()
+            .unwrap();
 
         let user_info = Rc::new(UserInfo {
             instance: config.connection.instance,
