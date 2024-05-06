@@ -227,70 +227,84 @@ impl Component for LemmynatorPost {
 
         f.render_widget(block, rect);
 
-        let [_, image_rect, _, mut text_rect] = Layout::horizontal([
-            Constraint::Length(1),
-            Constraint::Length(20),
-            Constraint::Length(1),
-            Constraint::Percentage(75),
-        ])
-        .areas(inner_rect);
+        if !self.is_image_only() {
+            let [_, image_rect, _, mut text_rect] = Layout::horizontal([
+                Constraint::Length(1),
+                Constraint::Length(20),
+                Constraint::Length(1),
+                Constraint::Percentage(75),
+            ])
+            .areas(inner_rect);
 
-        if let Some(image) = &mut *self.decoded_image.lock().unwrap() {
-            let image_state = StatefulImage::new(None);
-            f.render_stateful_widget(image_state, image_rect, image);
-        } else {
-            text_rect = inner_rect;
-        }
+            if let Some(image) = &mut *self.decoded_image.lock().unwrap() {
+                let image_state = StatefulImage::new(None);
+                f.render_stateful_widget(image_state, image_rect, image);
+            } else {
+                text_rect = inner_rect;
+            }
 
-        let mut there_was_a_header = false;
-        let lines: Vec<_> = self
-            .body
-            .lines()
-            .map(|line| {
-                if line.starts_with("#") {
-                    let trimmed_line = line.trim_start_matches('#');
-                    there_was_a_header = true;
-                    vec![Line::styled(trimmed_line, Style::new().bold())]
-                } else {
-                    if there_was_a_header {
-                        let rect_len = text_rect.width - 2;
-                        let mut result =
-                            String::with_capacity(line.len() + line.len() / rect_len as usize + 2);
-                        let mut count = 0;
-
-                        let mut lines = vec![];
-                        for (i, char) in line.char_indices() {
-                            if count < rect_len {
-                                if count == 0 {
-                                    result.push(' ');
-                                    result.push(' ');
-                                }
-                                result.push(char);
-                                count += 1;
-                            } else {
-                                result.push('\n');
-                                lines.push(Line::from(result.clone()));
-                                result.clear();
-                                count = 0;
-                            }
-                        }
-                        lines
+            let mut there_was_a_header = false;
+            let lines: Vec<_> = self
+                .body
+                .lines()
+                .map(|line| {
+                    if line.starts_with("#") {
+                        let trimmed_line = line.trim_start_matches('#');
+                        there_was_a_header = true;
+                        vec![Line::styled(trimmed_line, Style::new().bold())]
                     } else {
-                        vec![Line::raw(line)]
-                    }
-                }
-            })
-            .collect();
+                        if there_was_a_header {
+                            let rect_len = text_rect.width - 2;
+                            let mut result = String::with_capacity(
+                                line.len() + line.len() / rect_len as usize + 2,
+                            );
+                            let mut count = 0;
 
-        let mut new_lines = vec![];
-        for line in lines {
-            for line in line {
-                new_lines.push(line);
+                            let mut lines = vec![];
+                            for (i, char) in line.char_indices() {
+                                if count < rect_len {
+                                    if count == 0 {
+                                        result.push(' ');
+                                        result.push(' ');
+                                    }
+                                    result.push(char);
+                                    count += 1;
+                                } else {
+                                    result.push('\n');
+                                    lines.push(Line::from(result.clone()));
+                                    result.clear();
+                                    count = 0;
+                                }
+                            }
+                            lines
+                        } else {
+                            vec![Line::raw(line)]
+                        }
+                    }
+                })
+                .collect();
+
+            let mut new_lines = vec![];
+            for line in lines {
+                for line in line {
+                    new_lines.push(line);
+                }
+            }
+
+            let body_paragraph = Paragraph::new(new_lines).wrap(Wrap { trim: false });
+            f.render_widget(body_paragraph, text_rect);
+        } else {
+            let [_, image_rect, _] = Layout::horizontal([
+                Constraint::Percentage(45),
+                Constraint::Percentage(45),
+                Constraint::Percentage(10),
+            ])
+            .areas(inner_rect);
+            if let Some(image) = &mut *self.decoded_image.lock().unwrap() {
+                let image_state = StatefulImage::new(None);
+                f.render_stateful_widget(image_state, image_rect, image);
             }
         }
-
-        let body_paragraph = Paragraph::new(new_lines).wrap(Wrap { trim: false });
-        f.render_widget(body_paragraph, text_rect);
 
         self.is_focused = false;
     }
