@@ -14,7 +14,7 @@ use crate::ui::components::Component;
 
 pub struct LemmynatorPost {
     name: String,
-    body: Option<String>,
+    body: String,
     pub is_focused: bool,
     decoded_image: Arc<Mutex<Option<Box<dyn StatefulProtocol>>>>,
     embed_description: Option<String>,
@@ -24,19 +24,110 @@ pub struct LemmynatorPost {
     downvotes: i64,
     comments: i64,
     upvotes: i64,
+    is_featured_local: bool,
+    is_featured_community: bool,
 }
 
 impl LemmynatorPost {
-    fn header(&self) -> String {
+    pub fn from_lemmy_post(lemmy_post: PostView, ctx: Arc<Ctx>) -> Self {
+        let decoded_image = Arc::new(Mutex::new(None));
+
+        if let Some(url) = lemmy_post.post.thumbnail_url {
+            tokio::task::spawn(Self::fetch_image(
+                url.as_str().to_string(),
+                Arc::clone(&decoded_image),
+                Arc::clone(&ctx),
+            ));
+        }
+
+        let embed_url = lemmy_post
+            .post
+            .url
+            .and_then(|db_url| Some(url::Url::parse(db_url.as_str()).unwrap()));
+
+        let body: String = if let Some(body) = lemmy_post.post.body {
+            body.lines()
+                .filter(|line| !line.is_empty())
+                .map(|x| {
+                    let mut x = x.to_string();
+                    x.push('\n');
+                    x
+                })
+                .collect()
+            // Paragraph::new(body).wrap(Wrap { trim: false })
+            // f.render_widget(text, text_rect);
+        } else if let Some(body) = lemmy_post.post.embed_description.clone() {
+            body.lines()
+                .filter(|line| !line.is_empty())
+                .map(|x| {
+                    let mut x = x.to_string();
+                    x.push('\n');
+                    x
+                })
+                .collect()
+            // Paragraph::new(formatted_body.clone()).wrap(Wrap { trim: false })
+        } else {
+            "".to_string()
+        };
+        // Line::default().spans(spans);
+
+        LemmynatorPost {
+            name: lemmy_post.post.name,
+            body,
+            community: lemmy_post.community.name,
+            author: lemmy_post.creator.name,
+            embed_description: lemmy_post.post.embed_description,
+            embed_url,
+            is_focused: false,
+            decoded_image,
+            upvotes: lemmy_post.counts.upvotes,
+            downvotes: lemmy_post.counts.downvotes,
+            comments: lemmy_post.counts.comments,
+            is_featured_local: lemmy_post.post.featured_local,
+            is_featured_community: lemmy_post.post.featured_community,
+        }
+    }
+
+    fn is_image_only(&self) -> bool {
+        self.body.is_empty() && self.decoded_image.lock().unwrap().is_some()
+    }
+
+    fn header(&self) -> Line {
+        let mut spans = vec![];
+
+        if self.is_image_only() {
+            spans.push(Span::styled(" ", Style::new().white()));
+        }
+
+        if self.is_featured_local {
+            spans.push(Span::styled(" 󰐃", Style::new().yellow()))
+        }
+
+        if self.is_featured_community {
+            spans.push(Span::styled(" 󰐃", Style::new().green()))
+        }
+
+        spans.push(Span::styled(
+            format!(" {} ", self.name),
+            Style::new().white(),
+        ));
+
         if let Some(url) = &self.embed_url {
             if let Some(host) = url.host_str() {
-                format!(" {}  {} ", self.name, host)
-            } else {
-                format!(" {} ", self.name)
+                spans.push(Span::styled(format!(" {} ", host), Style::new().white()))
             }
-        } else {
-            format!(" {} ", self.name)
         }
+
+        let spans = if self.is_focused {
+            spans
+                .into_iter()
+                .map(|span| span.patch_style(Style::new().bold()))
+                .collect()
+        } else {
+            spans
+        };
+
+        Line::default().spans(spans)
     }
 
     fn footer_right(&self) -> Line {
@@ -44,12 +135,27 @@ impl LemmynatorPost {
         //     " c/{}  u/{}  ",
         //     self.community, self.author
         // )]);
-        let line = Line::default().spans(vec![
-            Span::raw(format!(" c/{}  u/{}  ", self.community, self.author)),
-            Span::styled(format!(" {}  ", self.upvotes), Style::new().green()),
-            Span::styled(format!(" {}  ", self.downvotes), Style::new().red()),
-            Span::raw(format!("󰆉 {} ", self.comments)),
-        ]);
+        let spans = vec![
+            Span::styled(
+                format!(" c/{}  u/{}  ", self.community, self.author),
+                Style::new().white(),
+            ),
+            Span::styled(format!(" {} ", self.upvotes), Style::new().green()),
+            Span::styled(format!(" "), Style::new().white()),
+            Span::styled(format!(" {}", self.downvotes), Style::new().red()),
+            Span::styled(format!(" "), Style::new().white()),
+            Span::styled(format!("󰆉 {} ", self.comments), Style::new().white()),
+        ];
+
+        let line = if self.is_focused {
+            let spans: Vec<_> = spans
+                .into_iter()
+                .map(|span| span.patch_style(Style::new().bold()))
+                .collect();
+            Line::default().spans(spans)
+        } else {
+            Line::default().spans(spans)
+        };
 
         line
         // format!(
@@ -91,37 +197,6 @@ impl LemmynatorPost {
         }
         ctx.action_tx.send(Action::Render).unwrap();
     }
-
-    pub fn from_lemmy_post(lemmy_post: PostView, ctx: Arc<Ctx>) -> Self {
-        let decoded_image = Arc::new(Mutex::new(None));
-
-        if let Some(url) = lemmy_post.post.thumbnail_url {
-            tokio::task::spawn(Self::fetch_image(
-                url.as_str().to_string(),
-                Arc::clone(&decoded_image),
-                Arc::clone(&ctx),
-            ));
-        }
-
-        let embed_url = lemmy_post
-            .post
-            .url
-            .and_then(|db_url| Some(url::Url::parse(db_url.as_str()).unwrap()));
-
-        LemmynatorPost {
-            name: lemmy_post.post.name,
-            body: lemmy_post.post.body,
-            community: lemmy_post.community.name,
-            author: lemmy_post.creator.name,
-            embed_description: lemmy_post.post.embed_description,
-            embed_url,
-            is_focused: false,
-            decoded_image,
-            upvotes: lemmy_post.counts.upvotes,
-            downvotes: lemmy_post.counts.downvotes,
-            comments: lemmy_post.counts.comments,
-        }
-    }
 }
 
 impl Component for LemmynatorPost {
@@ -134,7 +209,7 @@ impl Component for LemmynatorPost {
 
         let border_style = {
             if self.is_focused {
-                Style::default().fg(Color::Green)
+                Style::default().fg(Color::Magenta)
             } else {
                 Style::default()
             }
@@ -167,13 +242,55 @@ impl Component for LemmynatorPost {
             text_rect = inner_rect;
         }
 
-        if let Some(body) = &self.body {
-            let text = Paragraph::new(body.as_str()).wrap(Wrap { trim: false });
-            f.render_widget(text, text_rect);
-        } else if let Some(embed_desc) = &self.embed_description {
-            let text = Paragraph::new(embed_desc.as_str()).wrap(Wrap { trim: false });
-            f.render_widget(text, text_rect);
+        let mut there_was_a_header = false;
+        let lines: Vec<_> = self
+            .body
+            .lines()
+            .map(|line| {
+                if line.starts_with("#") {
+                    let trimmed_line = line.trim_start_matches('#');
+                    there_was_a_header = true;
+                    vec![Line::styled(trimmed_line, Style::new().bold())]
+                } else {
+                    if there_was_a_header {
+                        let rect_len = text_rect.width - 2;
+                        let mut result =
+                            String::with_capacity(line.len() + line.len() / rect_len as usize + 2);
+                        let mut count = 0;
+
+                        let mut lines = vec![];
+                        for (i, char) in line.char_indices() {
+                            if count < rect_len {
+                                if count == 0 {
+                                    result.push(' ');
+                                    result.push(' ');
+                                }
+                                result.push(char);
+                                count += 1;
+                            } else {
+                                result.push('\n');
+                                lines.push(Line::from(result.clone()));
+                                result.clear();
+                                count = 0;
+                            }
+                        }
+                        lines
+                    } else {
+                        vec![Line::raw(line)]
+                    }
+                }
+            })
+            .collect();
+
+        let mut new_lines = vec![];
+        for line in lines {
+            for line in line {
+                new_lines.push(line);
+            }
         }
+
+        let body_paragraph = Paragraph::new(new_lines).wrap(Wrap { trim: false });
+        f.render_widget(body_paragraph, text_rect);
 
         self.is_focused = false;
     }

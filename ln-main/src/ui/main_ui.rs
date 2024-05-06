@@ -129,7 +129,17 @@ impl TopBar {
     }
 
     fn menu_text(&self) -> String {
-        format!("{}  {}  ", self.total_unreads(), self.username)
+        let total_unreads = self.total_unreads();
+        let username = &self.username;
+        let dingle = {
+            if total_unreads == 0 {
+                "󰂚"
+            } else {
+                "󱅫"
+            }
+        };
+
+        format!("{dingle} {total_unreads}  {username}  ")
     }
 }
 
