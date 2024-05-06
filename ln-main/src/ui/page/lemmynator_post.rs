@@ -1,6 +1,7 @@
 use std::io::Cursor;
 use std::sync::{Arc, Mutex};
 
+use image::GenericImageView;
 use lemmy_api_common::lemmy_db_views::structs::PostView;
 use ratatui::prelude::*;
 use ratatui::widgets::block::{Position, Title};
@@ -16,7 +17,7 @@ pub struct LemmynatorPost {
     name: String,
     body: String,
     pub is_focused: bool,
-    decoded_image: Arc<Mutex<Option<Box<dyn StatefulProtocol>>>>,
+    image: Arc<Mutex<Option<Image>>>,
     embed_description: Option<String>,
     embed_url: Option<url::Url>,
     author: String,
@@ -28,14 +29,19 @@ pub struct LemmynatorPost {
     is_featured_community: bool,
 }
 
+struct Image {
+    image: Box<dyn StatefulProtocol>,
+    dimensions: (u32, u32),
+}
+
 impl LemmynatorPost {
     pub fn from_lemmy_post(lemmy_post: PostView, ctx: Arc<Ctx>) -> Self {
-        let decoded_image = Arc::new(Mutex::new(None));
+        let image = Arc::new(Mutex::new(None));
 
         if let Some(url) = lemmy_post.post.thumbnail_url {
             tokio::task::spawn(Self::fetch_image(
                 url.as_str().to_string(),
-                Arc::clone(&decoded_image),
+                Arc::clone(&image),
                 Arc::clone(&ctx),
             ));
         }
@@ -79,7 +85,7 @@ impl LemmynatorPost {
             embed_description: lemmy_post.post.embed_description,
             embed_url,
             is_focused: false,
-            decoded_image,
+            image,
             upvotes: lemmy_post.counts.upvotes,
             downvotes: lemmy_post.counts.downvotes,
             comments: lemmy_post.counts.comments,
@@ -89,7 +95,7 @@ impl LemmynatorPost {
     }
 
     fn is_image_only(&self) -> bool {
-        self.body.is_empty() && self.decoded_image.lock().unwrap().is_some()
+        self.body.is_empty() && self.image.lock().unwrap().is_some()
     }
 
     fn header(&self) -> Line {
@@ -168,11 +174,7 @@ impl LemmynatorPost {
         // )
     }
 
-    async fn fetch_image(
-        url: String,
-        image: Arc<Mutex<Option<Box<dyn StatefulProtocol>>>>,
-        ctx: Arc<Ctx>,
-    ) {
+    async fn fetch_image(url: String, image: Arc<Mutex<Option<Image>>>, ctx: Arc<Ctx>) {
         let new_image = {
             let res = ctx.client.get(url).send().await.unwrap();
             Some(res.bytes().await.unwrap())
@@ -184,7 +186,11 @@ impl LemmynatorPost {
                 .unwrap()
                 .decode();
             if let Ok(dyn_image) = dyn_image_res {
-                Some(ctx.picker.lock().unwrap().new_resize_protocol(dyn_image))
+                dyn_image.dimensions();
+                Some(Image {
+                    dimensions: dyn_image.dimensions(),
+                    image: ctx.picker.lock().unwrap().new_resize_protocol(dyn_image),
+                })
             } else {
                 None
             }
@@ -236,9 +242,9 @@ impl Component for LemmynatorPost {
             ])
             .areas(inner_rect);
 
-            if let Some(image) = &mut *self.decoded_image.lock().unwrap() {
+            if let Some(image) = &mut *self.image.lock().unwrap() {
                 let image_state = StatefulImage::new(None);
-                f.render_stateful_widget(image_state, image_rect, image);
+                f.render_stateful_widget(image_state, image_rect, &mut image.image);
             } else {
                 text_rect = inner_rect;
             }
@@ -294,15 +300,23 @@ impl Component for LemmynatorPost {
             let body_paragraph = Paragraph::new(new_lines).wrap(Wrap { trim: false });
             f.render_widget(body_paragraph, text_rect);
         } else {
+            let left_padding_percentage = {
+                let (width, height) = self.image.lock().unwrap().as_ref().unwrap().dimensions;
+                if width > height {
+                    40
+                } else {
+                    45
+                }
+            };
             let [_, image_rect, _] = Layout::horizontal([
-                Constraint::Percentage(45),
+                Constraint::Percentage(left_padding_percentage),
                 Constraint::Percentage(45),
                 Constraint::Percentage(10),
             ])
             .areas(inner_rect);
-            if let Some(image) = &mut *self.decoded_image.lock().unwrap() {
+            if let Some(image) = &mut *self.image.lock().unwrap() {
                 let image_state = StatefulImage::new(None);
-                f.render_stateful_widget(image_state, image_rect, image);
+                f.render_stateful_widget(image_state, image_rect, &mut image.image);
             }
         }
 
