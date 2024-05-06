@@ -100,10 +100,10 @@ impl Page {
     }
 
     fn scroll_up(&mut self) {
-        if self.currently_focused == 0 {
+        if self.currently_focused == 0 && self.posts_offset != 0 {
             self.posts_offset -= self.currently_displaying as usize;
             self.currently_focused = self.currently_displaying - 1;
-        } else {
+        } else if self.currently_focused != 0 {
             self.currently_focused -= 1;
         }
     }
