@@ -258,14 +258,17 @@ impl LemmynatorPost {
     fn footer_right(&self) -> Line {
         let spans = vec![
             Span::styled(
-                format!(" c/{}  u/{}  ", self.community, self.author),
+                format!("  c/{}   u/{}  ", self.community, self.author),
                 Style::new().white(),
             ),
-            Span::styled(format!(" {} ", self.counts.upvotes), Style::new().green()),
+            Span::styled(format!("  {} ", self.counts.upvotes), Style::new().green()),
             Span::styled(format!(" "), Style::new().white()),
-            Span::styled(format!(" {}", self.counts.downvotes), Style::new().red()),
+            Span::styled(format!("  {} ", self.counts.downvotes), Style::new().red()),
             Span::styled(format!(" "), Style::new().white()),
-            Span::styled(format!("󰆉 {} ", self.counts.comments), Style::new().white()),
+            Span::styled(
+                format!(" 󰆉 {} ", self.counts.comments),
+                Style::new().white(),
+            ),
         ];
 
         let line = if self.is_focused {
@@ -296,10 +299,17 @@ impl LemmynatorPost {
             spans.push(Span::styled(" 󰐃", Style::new().green()))
         }
 
-        spans.push(Span::styled(
-            format!(" {} ", self.name),
-            Style::new().white(),
-        ));
+        if self.name.len() > 45 {
+            spans.push(Span::styled(
+                format!(" {}... ", &self.name[..45].trim_end()),
+                Style::new().white(),
+            ));
+        } else {
+            spans.push(Span::styled(
+                format!(" {} ", self.name),
+                Style::new().white(),
+            ));
+        }
 
         if let Some(url) = &self.embed_url {
             if let Some(host) = url.host_str() {

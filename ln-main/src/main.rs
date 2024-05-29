@@ -7,7 +7,7 @@ use anyhow::Result;
 use app::App;
 use ln_config::Config;
 
-#[tokio::main(flavor = "current_thread")]
+#[tokio::main]
 async fn main() -> Result<()> {
     let config = Config::init()?;
 

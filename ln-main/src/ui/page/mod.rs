@@ -1,8 +1,11 @@
 pub mod lemmynator_post;
 
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc, Mutex,
+use std::{
+    borrow::Borrow,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
 };
 
 use lemmy_api_common::{
@@ -19,6 +22,7 @@ use self::lemmynator_post::LemmynatorPost;
 use super::components::Component;
 
 pub struct Page {
+    listing_type: ListingType,
     next_page: Arc<Mutex<PaginationCursor>>,
     posts: Arc<Mutex<Vec<LemmynatorPost>>>,
     posts_offset: usize,
@@ -56,6 +60,7 @@ impl Page {
             .collect();
 
         Self {
+            listing_type,
             posts: Arc::new(Mutex::new(posts)),
             next_page: Arc::new(Mutex::new(next_page)),
             posts_offset: 0,
@@ -71,10 +76,10 @@ impl Page {
         posts: Arc<Mutex<Vec<LemmynatorPost>>>,
         atomic_lock: Arc<AtomicBool>,
         ctx: Arc<Ctx>,
+        listing_type: ListingType,
     ) {
-        // TODO: shoot an action of render from Ctx
         let posts_req = GetPosts {
-            type_: Some(ListingType::Local),
+            type_: Some(listing_type),
             sort: Some(lemmy_api_common::lemmy_db_schema::SortType::Hot),
             page_cursor: Some(cursor.lock().unwrap().clone()),
             limit: Some(20),
@@ -97,6 +102,7 @@ impl Page {
         posts.lock().unwrap().append(&mut new_posts);
         *cursor.lock().unwrap() = page.next_page.unwrap();
         atomic_lock.store(true, Ordering::SeqCst);
+        ctx.action_tx.send(Action::Render).unwrap();
     }
 
     fn scroll_up(&mut self) {
@@ -165,6 +171,7 @@ impl Component for Page {
                                 Arc::clone(&self.posts),
                                 Arc::clone(&self.can_fetch_new_pages),
                                 Arc::clone(&self.ctx),
+                                self.listing_type,
                             ));
                         }
                         break;
