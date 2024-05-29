@@ -24,6 +24,7 @@ pub struct LemmynatorPost {
     counts: LemmynatorCounts,
     is_featured_local: bool,
     is_featured_community: bool,
+    pub is_body_empty: bool,
 }
 
 struct LemmynatorCounts {
@@ -67,6 +68,7 @@ impl LemmynatorPost {
 
         LemmynatorPost {
             name: lemmy_post.post.name,
+            is_body_empty: body.is_empty(),
             body,
             community: lemmy_post.community.name,
             author: lemmy_post.creator.name,
@@ -96,7 +98,7 @@ impl LemmynatorPost {
             .collect()
     }
 
-    fn is_image_only(&self) -> bool {
+    pub fn is_image_only(&self) -> bool {
         self.body.is_empty() && self.image_data.lock().unwrap().is_some()
     }
 

@@ -1,8 +1,12 @@
 pub mod lemmynator_post;
 
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc, Mutex,
+use std::{
+    any::Any,
+    fmt::Pointer,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
 };
 
 use lemmy_api_common::{
@@ -10,7 +14,7 @@ use lemmy_api_common::{
     lemmy_db_views::structs::PaginationCursor,
     post::{GetPosts, GetPostsResponse},
 };
-use ratatui::prelude::*;
+use ratatui::{layout::Offset, prelude::*};
 
 use crate::{action::Action, app::Ctx};
 
@@ -143,11 +147,10 @@ impl Component for Page {
         self.update_count_of_currently_displaying(rect);
         let blocks_count = rect.height / 8;
 
-        let layouts = Layout::vertical(vec![
-            Constraint::Length(8);
-            self.currently_displaying as usize
-        ])
-        .split(rect);
+        let main_rect = rect;
+        let mut size_occupied = 0;
+        let mut rect_pool = rect;
+        let mut rects = vec![];
 
         let mut posts_lock = self.posts.lock().unwrap();
 
@@ -164,24 +167,41 @@ impl Component for Page {
             Self::try_fetch_new_pages(&self);
         }
 
-        for index in 0..blocks_count {
-            let layout = layouts[index as usize];
+        let posts = &mut offseted_posts[..blocks_count as usize];
 
-            let post = {
-                match offseted_posts.get_mut(index as usize) {
-                    Some(post) => post,
-                    None => {
-                        drop(posts_lock);
-                        break;
-                    }
+        for (index, post) in posts.into_iter().enumerate() {
+            let vertical_length = {
+                if post.is_body_empty && !post.is_image_only() {
+                    size_occupied += 5;
+                    5
+                } else {
+                    size_occupied += 8;
+                    8
                 }
             };
+            let layout = Layout::vertical(vec![
+                Constraint::Length(vertical_length),
+                Constraint::Percentage(100),
+            ])
+            .split(rect_pool);
 
+            rects.push(layout[0]);
+            rect_pool = layout[1];
+
+            if post.is_body_empty {}
             if self.currently_focused == index as u8 {
                 post.is_focused = true;
             }
+        }
 
-            post.render(f, layout);
+        let mut current_offset = 0;
+        for (post, mut rect) in posts.into_iter().zip(rects.into_iter()) {
+            if main_rect.height - size_occupied > blocks_count {
+                current_offset += 1;
+                rect.y += current_offset;
+            }
+
+            post.render(f, rect);
 
             post.is_focused = false;
         }
