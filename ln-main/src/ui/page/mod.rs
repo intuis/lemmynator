@@ -1,12 +1,8 @@
 pub mod lemmynator_post;
 
-use std::{
-    any::Any,
-    fmt::Pointer,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc, Mutex,
-    },
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, Mutex,
 };
 
 use lemmy_api_common::{
@@ -14,7 +10,7 @@ use lemmy_api_common::{
     lemmy_db_views::structs::PaginationCursor,
     post::{GetPosts, GetPostsResponse},
 };
-use ratatui::{layout::Offset, prelude::*};
+use ratatui::prelude::*;
 
 use crate::{action::Action, app::Ctx};
 

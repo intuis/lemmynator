@@ -1,9 +1,6 @@
-use std::{rc::Rc, sync::Arc};
+use std::sync::Arc;
 
-use crate::{
-    action::Action,
-    app::{Ctx, UserInfo},
-};
+use crate::{action::Action, app::Ctx};
 
 use super::{
     components::{
@@ -22,9 +19,9 @@ pub struct MainWindow {
 }
 
 impl MainWindow {
-    pub async fn new(user_info: Rc<UserInfo>, ctx: Arc<Ctx>) -> Self {
+    pub async fn new(ctx: Arc<Ctx>) -> Self {
         Self {
-            posts_viewer: PostsComponent::new(user_info, Arc::clone(&ctx)).await,
+            posts_viewer: PostsComponent::new(Arc::clone(&ctx)).await,
             ctx: Arc::clone(&ctx),
         }
     }
@@ -43,7 +40,6 @@ impl Component for MainWindow {
 struct PostsComponent {
     tabs: TabComponent,
     top_bar: TopBar,
-    user_info: Rc<UserInfo>,
     subscribed_page: Page,
     local_page: Page,
     all_page: Page,
@@ -51,10 +47,13 @@ struct PostsComponent {
 }
 
 impl PostsComponent {
-    async fn new(user_info: Rc<UserInfo>, ctx: Arc<Ctx>) -> Self {
+    async fn new(ctx: Arc<Ctx>) -> Self {
         let unread_counts: GetUnreadCountResponse = ctx
             .client
-            .get("https://slrpnk.net/api/v3/user/unread_count")
+            .get(format!(
+                "https://{}/api/v3/user/unread_count",
+                ctx.config.connection.instance
+            ))
             .send()
             .await
             .unwrap()
@@ -63,9 +62,13 @@ impl PostsComponent {
             .unwrap();
 
         Self {
-            tabs: TabComponent::new(),
-            top_bar: TopBar::new(Arc::clone(&ctx), user_info.user.to_string(), unread_counts).await,
-            user_info,
+            tabs: TabComponent::new(Arc::clone(&ctx)),
+            top_bar: TopBar::new(
+                Arc::clone(&ctx),
+                ctx.config.connection.username.clone(),
+                unread_counts,
+            )
+            .await,
             subscribed_page: Page::new(ListingType::Subscribed, Arc::clone(&ctx)).await,
             local_page: Page::new(ListingType::Local, Arc::clone(&ctx)).await,
             all_page: Page::new(ListingType::All, Arc::clone(&ctx)).await,
@@ -128,18 +131,23 @@ impl TopBar {
         unread_counts.replies + unread_counts.mentions + unread_counts.private_messages
     }
 
-    fn menu_text(&self) -> String {
+    fn menu_text(&self) -> Line {
         let total_unreads = self.total_unreads();
-        let username = &self.username;
-        let dingle = {
-            if total_unreads == 0 {
-                "󰂚"
-            } else {
-                "󱅫"
-            }
-        };
+        let mut spans = vec![];
 
-        format!("{dingle} {total_unreads}  {username}  ")
+        spans.push({
+            if total_unreads == 0 {
+                Span::raw(" 󰂚 0")
+            } else {
+                Span::styled(
+                    format!(" 󱅫 {total_unreads}"),
+                    Style::new().fg(self.ctx.config.general.accent_color.as_ratatui()),
+                )
+            }
+        });
+
+        spans.push(Span::raw(format!("  {} ", &self.username)));
+        Line::from(spans)
     }
 }
 

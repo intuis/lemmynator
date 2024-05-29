@@ -36,12 +36,7 @@ pub struct Ctx {
     pub action_tx: UnboundedSender<Action>,
     pub client: Client,
     pub picker: Mutex<Picker>,
-}
-
-pub struct UserInfo {
-    instance: String,
-    pub user: Sensitive<String>,
-    jwt: Sensitive<String>,
+    pub config: Config,
 }
 
 impl App {
@@ -53,7 +48,7 @@ impl App {
 
         let login_req = Login {
             username_or_email: Sensitive::new(config.connection.username.clone()),
-            password: Sensitive::new(config.connection.password),
+            password: Sensitive::new(config.connection.password.clone()),
             ..Default::default()
         };
 
@@ -75,12 +70,6 @@ impl App {
             .default_headers(header_map)
             .build()?;
 
-        let user_info = Rc::new(UserInfo {
-            instance: config.connection.instance,
-            user: Sensitive::new(config.connection.username),
-            jwt: res.jwt.unwrap(),
-        });
-
         let mut picker = Picker::from_termios().unwrap();
         picker.guess_protocol();
 
@@ -88,11 +77,12 @@ impl App {
             action_tx: action_tx.clone(),
             client,
             picker: Mutex::new(picker),
+            config,
         });
 
         Ok(Self {
             should_quit: false,
-            main_window: MainWindow::new(user_info, Arc::clone(&ctx)).await,
+            main_window: MainWindow::new(Arc::clone(&ctx)).await,
             action_tx,
             action_rx,
             mode: Mode::Normal,

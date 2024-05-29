@@ -25,6 +25,7 @@ pub struct LemmynatorPost {
     is_featured_local: bool,
     is_featured_community: bool,
     pub is_body_empty: bool,
+    ctx: Arc<Ctx>,
 }
 
 struct LemmynatorCounts {
@@ -78,6 +79,7 @@ impl LemmynatorPost {
             counts,
             is_featured_local: lemmy_post.post.featured_local,
             is_featured_community: lemmy_post.post.featured_community,
+            ctx,
         }
     }
 
@@ -219,7 +221,7 @@ impl LemmynatorPost {
 
     fn border_style(&self) -> Style {
         if self.is_focused {
-            Style::default().fg(Color::Magenta)
+            Style::default().fg(self.ctx.config.general.accent_color.as_ratatui())
         } else {
             Style::default()
         }
