@@ -41,7 +41,7 @@ impl LemmynatorPost {
     pub fn from_lemmy_post(lemmy_post: PostView, ctx: Arc<Ctx>) -> Self {
         let image = Arc::new(Mutex::new(None));
 
-        if let Some(url) = lemmy_post.post.thumbnail_url {
+        if let Some(ref url) = lemmy_post.post.thumbnail_url {
             tokio::task::spawn(Self::fetch_image(
                 url.as_str().to_string(),
                 Arc::clone(&image),
@@ -52,29 +52,12 @@ impl LemmynatorPost {
         let embed_url = lemmy_post
             .post
             .url
-            .and_then(|db_url| Some(url::Url::parse(db_url.as_str()).unwrap()));
+            .as_ref()
+            .map(|db_url| url::Url::parse(db_url.as_str()))
+            .transpose()
+            .unwrap();
 
-        let body: String = if let Some(body) = lemmy_post.post.body {
-            body.lines()
-                .filter(|line| !line.is_empty())
-                .map(|x| {
-                    let mut x = x.to_string();
-                    x.push('\n');
-                    x
-                })
-                .collect()
-        } else if let Some(body) = lemmy_post.post.embed_description {
-            body.lines()
-                .filter(|line| !line.is_empty())
-                .map(|x| {
-                    let mut x = x.to_string();
-                    x.push('\n');
-                    x
-                })
-                .collect()
-        } else {
-            "".to_string()
-        };
+        let body = Self::extract_body(&lemmy_post);
 
         let counts = LemmynatorCounts {
             upvotes: lemmy_post.counts.upvotes,
@@ -94,6 +77,23 @@ impl LemmynatorPost {
             is_featured_local: lemmy_post.post.featured_local,
             is_featured_community: lemmy_post.post.featured_community,
         }
+    }
+
+    fn extract_body(lemmy_post: &PostView) -> String {
+        let unprocessed_body = {
+            if let Some(post_body) = &lemmy_post.post.body {
+                post_body
+            } else if let Some(embed_desc) = &lemmy_post.post.embed_description {
+                embed_desc
+            } else {
+                ""
+            }
+        };
+
+        unprocessed_body
+            .split_inclusive('\n')
+            .filter(|line| !line.trim_end().is_empty())
+            .collect()
     }
 
     fn is_image_only(&self) -> bool {
@@ -158,55 +158,25 @@ impl Component for LemmynatorPost {
                 text_rect = inner_rect;
             }
 
-            let mut there_was_a_header = false;
-            let lines: Vec<_> = self
+            let mut md_header_encountered = false;
+            let body: Vec<_> = self
                 .body
                 .lines()
-                .map(|line| {
-                    if line.starts_with("#") {
-                        let trimmed_line = line.trim_start_matches('#');
-                        there_was_a_header = true;
+                .flat_map(|line| {
+                    if line.starts_with('#') {
+                        md_header_encountered = true;
+                        let trimmed_line = line[0..].trim_start_matches('#').trim_start();
                         vec![Line::styled(trimmed_line, Style::new().bold())]
+                    } else if md_header_encountered {
+                        let max_width = text_rect.width - 2;
+                        Self::wrap_line(line, max_width)
                     } else {
-                        if there_was_a_header {
-                            let rect_len = text_rect.width - 2;
-                            let mut result = String::with_capacity(
-                                line.len() + line.len() / rect_len as usize + 2,
-                            );
-                            let mut count = 0;
-
-                            let mut lines = vec![];
-                            for char in line.chars() {
-                                if count < rect_len {
-                                    if count == 0 {
-                                        result.push(' ');
-                                        result.push(' ');
-                                    }
-                                    result.push(char);
-                                    count += 1;
-                                } else {
-                                    result.push('\n');
-                                    lines.push(Line::from(result.clone()));
-                                    result.clear();
-                                    count = 0;
-                                }
-                            }
-                            lines
-                        } else {
-                            vec![Line::raw(line)]
-                        }
+                        vec![Line::from(Self::parse_markdown_url(line))]
+                        // vec![Line::raw(line)]
                     }
                 })
                 .collect();
-
-            let mut new_lines = vec![];
-            for line in lines {
-                for line in line {
-                    new_lines.push(line);
-                }
-            }
-
-            let body_paragraph = Paragraph::new(new_lines).wrap(Wrap { trim: false });
+            let body_paragraph = Paragraph::new(body).wrap(Wrap { trim: false });
             f.render_widget(body_paragraph, text_rect);
         } else {
             let left_padding_percentage = {
@@ -228,8 +198,6 @@ impl Component for LemmynatorPost {
                 f.render_stateful_widget(image_state, image_rect, &mut image.image);
             }
         }
-
-        self.is_focused = false;
     }
 }
 
@@ -258,13 +226,13 @@ impl LemmynatorPost {
     fn footer_right(&self) -> Line {
         let spans = vec![
             Span::styled(
-                format!("  c/{}   u/{}  ", self.community, self.author),
+                format!(" c/{}   u/{}  ", self.community, self.author),
                 Style::new().white(),
             ),
             Span::styled(format!("  {} ", self.counts.upvotes), Style::new().green()),
-            Span::styled(format!(" "), Style::new().white()),
+            Span::styled(" ", Style::new().white()),
             Span::styled(format!("  {} ", self.counts.downvotes), Style::new().red()),
-            Span::styled(format!(" "), Style::new().white()),
+            Span::styled(" ", Style::new().white()),
             Span::styled(
                 format!(" 󰆉 {} ", self.counts.comments),
                 Style::new().white(),
@@ -327,5 +295,57 @@ impl LemmynatorPost {
         };
 
         Line::default().spans(spans)
+    }
+
+    fn wrap_line(line: &str, max_width: u16) -> Vec<Line> {
+        let mut wrapped_lines = Vec::new();
+        let mut current_line = String::with_capacity(max_width as usize + 2);
+        let mut count = 0;
+
+        for ch in line.chars() {
+            if count == 0 {
+                current_line.push_str("  ");
+                count += 2;
+            }
+
+            if count < max_width {
+                current_line.push(ch);
+                count += 1;
+            } else {
+                wrapped_lines.push(Line::from(current_line.clone()));
+                current_line.clear();
+                count = 0;
+            }
+        }
+
+        if !current_line.is_empty() {
+            wrapped_lines.push(Line::from(current_line));
+        }
+        wrapped_lines
+    }
+
+    fn parse_markdown_url(text: &str) -> Vec<Span<'_>> {
+        let link_regex = regex::Regex::new(r"\[([^\]]+)\]\(([^)]+)\)").unwrap();
+        let mut parsed_spans = Vec::new();
+        let mut last_index = 0;
+
+        for capture in link_regex.captures_iter(text) {
+            let full_match = capture.get(0).unwrap();
+            let link_text = capture.get(1).unwrap().as_str();
+            // let url = capture.get(2).unwrap().as_str();
+
+            parsed_spans.push(Span::styled(
+                &text[last_index..full_match.start()],
+                Style::new().white(),
+            ));
+            parsed_spans.push(Span::styled(
+                link_text,
+                Style::new().fg(Color::Cyan).underlined(),
+            ));
+            last_index = full_match.end();
+        }
+
+        parsed_spans.push(Span::styled(&text[last_index..], Style::new().white()));
+        parsed_spans
     }
 }

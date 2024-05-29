@@ -971,6 +971,7 @@ dependencies = [
  "ln-config",
  "ratatui",
  "ratatui-image",
+ "regex",
  "reqwest",
  "serde",
  "tokio",

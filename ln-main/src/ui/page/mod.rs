@@ -1,11 +1,8 @@
 pub mod lemmynator_post;
 
-use std::{
-    borrow::Borrow,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc, Mutex,
-    },
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, Mutex,
 };
 
 use lemmy_api_common::{
@@ -178,10 +175,14 @@ impl Component for Page {
                     }
                 }
             };
+
             if self.currently_focused == index as u8 {
                 post.is_focused = true;
             }
+
             post.render(f, layout);
+
+            post.is_focused = false;
         }
     }
 }

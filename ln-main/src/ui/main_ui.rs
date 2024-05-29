@@ -32,10 +32,10 @@ impl MainWindow {
 
 impl Component for MainWindow {
     fn handle_actions(&mut self, action: Action) -> Option<Action> {
-        return self.posts_viewer.handle_actions(action);
+        self.posts_viewer.handle_actions(action)
     }
 
-    fn render(&mut self, f: &mut Frame, rect: Rect) {
+    fn render(&mut self, f: &mut Frame, _rect: Rect) {
         self.posts_viewer.render(f, f.size());
     }
 }

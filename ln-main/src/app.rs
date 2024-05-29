@@ -1,6 +1,5 @@
 use std::{
     rc::Rc,
-    str::FromStr,
     sync::{Arc, Mutex},
 };
 
@@ -50,7 +49,7 @@ impl App {
         let (action_tx, action_rx) = mpsc::unbounded_channel();
         let user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
-        let client = Client::builder().user_agent(user_agent).build().unwrap();
+        let client = Client::builder().user_agent(user_agent).build()?;
 
         let login_req = Login {
             username_or_email: Sensitive::new(config.connection.username.clone()),
@@ -69,14 +68,12 @@ impl App {
         let mut header_map = HeaderMap::new();
         header_map.insert(
             reqwest::header::AUTHORIZATION,
-            HeaderValue::from_str(&format!("Bearer {}", res.jwt.as_ref().unwrap().to_string()))
-                .unwrap(),
+            HeaderValue::from_str(&format!("Bearer {}", &res.jwt.as_ref().unwrap()[..]))?,
         );
         let client = Client::builder()
             .user_agent(user_agent)
             .default_headers(header_map)
-            .build()
-            .unwrap();
+            .build()?;
 
         let user_info = Rc::new(UserInfo {
             instance: config.connection.instance,
@@ -107,8 +104,6 @@ impl App {
         let mut tui = Tui::new()?;
 
         tui.enter()?;
-
-        self.render(&mut tui)?;
 
         self.main_loop(&mut tui).await?;
 
@@ -175,7 +170,7 @@ impl App {
                 Some(A::Render)
             }
 
-            _ => return self.main_window.handle_actions(action),
+            _ => self.main_window.handle_actions(action),
         }
     }
 }
