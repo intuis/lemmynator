@@ -150,45 +150,28 @@ impl Component for Page {
         .split(rect);
 
         let mut posts_lock = self.posts.lock().unwrap();
+
+        if posts_lock.len() < self.posts_offset + blocks_count as usize {
+            // Can't render a full page. Fetch new pages then and return.
+            Self::try_fetch_new_pages(&self);
+            return;
+        }
+
+        let offseted_posts = &mut posts_lock[self.posts_offset..];
+
+        if let None = offseted_posts.get(2 * blocks_count as usize) {
+            // We are getting near the end of available pages, fetch new pages then
+            Self::try_fetch_new_pages(&self);
+        }
+
         for index in 0..blocks_count {
             let layout = layouts[index as usize];
-            // TODO: clean up this code because it looks ugly
-            let post = {
-                if let None = posts_lock.get(self.posts_offset + 3 + blocks_count as usize) {
-                    if let Ok(true) = self.can_fetch_new_pages.compare_exchange(
-                        true,
-                        false,
-                        Ordering::SeqCst,
-                        Ordering::SeqCst,
-                    ) {
-                        tokio::task::spawn(Self::fetch_next_page(
-                            Arc::clone(&self.next_page),
-                            Arc::clone(&self.posts),
-                            Arc::clone(&self.can_fetch_new_pages),
-                            Arc::clone(&self.ctx),
-                            self.listing_type,
-                        ));
-                    }
-                }
 
-                match posts_lock.get_mut(self.posts_offset + index as usize) {
+            let post = {
+                match offseted_posts.get_mut(index as usize) {
                     Some(post) => post,
                     None => {
                         drop(posts_lock);
-                        if let Ok(true) = self.can_fetch_new_pages.compare_exchange(
-                            true,
-                            false,
-                            Ordering::SeqCst,
-                            Ordering::SeqCst,
-                        ) {
-                            tokio::task::spawn(Self::fetch_next_page(
-                                Arc::clone(&self.next_page),
-                                Arc::clone(&self.posts),
-                                Arc::clone(&self.can_fetch_new_pages),
-                                Arc::clone(&self.ctx),
-                                self.listing_type,
-                            ));
-                        }
                         break;
                     }
                 }
@@ -201,6 +184,25 @@ impl Component for Page {
             post.render(f, layout);
 
             post.is_focused = false;
+        }
+    }
+}
+
+impl Page {
+    fn try_fetch_new_pages(&self) {
+        if let Ok(true) = self.can_fetch_new_pages.compare_exchange(
+            true,
+            false,
+            Ordering::SeqCst,
+            Ordering::SeqCst,
+        ) {
+            tokio::task::spawn(Self::fetch_next_page(
+                Arc::clone(&self.next_page),
+                Arc::clone(&self.posts),
+                Arc::clone(&self.can_fetch_new_pages),
+                Arc::clone(&self.ctx),
+                self.listing_type,
+            ));
         }
     }
 }
