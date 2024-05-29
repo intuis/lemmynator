@@ -152,7 +152,25 @@ impl Component for Page {
         let mut posts_lock = self.posts.lock().unwrap();
         for index in 0..blocks_count {
             let layout = layouts[index as usize];
+            // TODO: clean up this code because it looks ugly
             let post = {
+                if let None = posts_lock.get(self.posts_offset + 3 + blocks_count as usize) {
+                    if let Ok(true) = self.can_fetch_new_pages.compare_exchange(
+                        true,
+                        false,
+                        Ordering::SeqCst,
+                        Ordering::SeqCst,
+                    ) {
+                        tokio::task::spawn(Self::fetch_next_page(
+                            Arc::clone(&self.next_page),
+                            Arc::clone(&self.posts),
+                            Arc::clone(&self.can_fetch_new_pages),
+                            Arc::clone(&self.ctx),
+                            self.listing_type,
+                        ));
+                    }
+                }
+
                 match posts_lock.get_mut(self.posts_offset + index as usize) {
                     Some(post) => post,
                     None => {

@@ -268,8 +268,10 @@ impl LemmynatorPost {
         }
 
         if self.name.len() > 45 {
+            let last_char_indice = self.name.char_indices().map(|(i, _)| i).nth(45).unwrap();
+
             spans.push(Span::styled(
-                format!(" {}... ", &self.name[..45].trim_end()),
+                format!(" {}... ", &self.name[..last_char_indice].trim_end()),
                 Style::new().white(),
             ));
         } else {
