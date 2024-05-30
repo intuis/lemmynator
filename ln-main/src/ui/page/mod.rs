@@ -5,23 +5,23 @@ use std::sync::{
     Arc, Mutex,
 };
 
+use anyhow::Result;
 use lemmy_api_common::{
-    lemmy_db_schema::{ListingType, SortType},
+    lemmy_db_schema::ListingType,
     lemmy_db_views::structs::PaginationCursor,
     post::{GetPosts, GetPostsResponse},
 };
-use ratatui::prelude::*;
+use ratatui::{layout::Offset, prelude::*, widgets::Paragraph};
 
 use crate::{action::Action, app::Ctx};
 
 use self::lemmynator_post::LemmynatorPost;
 
-use super::components::Component;
+use super::{centered_rect, components::Component};
 
 pub struct Page {
     listing_type: ListingType,
-    next_page: Arc<Mutex<PaginationCursor>>,
-    posts: Arc<Mutex<Vec<LemmynatorPost>>>,
+    page_data: Arc<Mutex<Option<PageData>>>,
     posts_offset: usize,
     currently_focused: u8,
     currently_displaying: u8,
@@ -29,63 +29,60 @@ pub struct Page {
     ctx: Arc<Ctx>,
 }
 
+struct PageData {
+    next_page: PaginationCursor,
+    posts: Vec<LemmynatorPost>,
+}
+
+impl PageData {
+    fn new(posts: Vec<LemmynatorPost>, next_page: PaginationCursor) -> Self {
+        PageData { posts, next_page }
+    }
+}
+
 impl Page {
-    pub async fn new(listing_type: ListingType, ctx: Arc<Ctx>) -> Self {
-        let local_posts_req = GetPosts {
-            type_: Some(listing_type),
-            limit: Some(10),
-            sort: Some(SortType::Hot),
-            ..Default::default()
-        };
-
-        let page = ctx
-            .client
-            .get("https://slrpnk.net/api/v3/post/list")
-            .query(&local_posts_req)
-            .send()
-            .await
-            .unwrap();
-
-        let page: GetPostsResponse = page.json().await.unwrap();
-
-        let next_page = page.next_page.unwrap();
-
-        let posts = page
-            .posts
-            .into_iter()
-            .map(|post| LemmynatorPost::from_lemmy_post(post, Arc::clone(&ctx)))
-            .collect();
-
-        Self {
+    pub async fn new(listing_type: ListingType, ctx: Arc<Ctx>) -> Result<Self> {
+        Ok(Self {
             listing_type,
-            posts: Arc::new(Mutex::new(posts)),
-            next_page: Arc::new(Mutex::new(next_page)),
+            page_data: Arc::new(Mutex::new(None)),
             posts_offset: 0,
             currently_focused: 0,
             currently_displaying: 0,
             can_fetch_new_pages: Arc::new(AtomicBool::new(true)),
             ctx: Arc::clone(&ctx),
-        }
+        })
     }
 
     async fn fetch_next_page(
-        cursor: Arc<Mutex<PaginationCursor>>,
-        posts: Arc<Mutex<Vec<LemmynatorPost>>>,
+        page_data: Arc<Mutex<Option<PageData>>>,
         atomic_lock: Arc<AtomicBool>,
         ctx: Arc<Ctx>,
         listing_type: ListingType,
     ) {
+        let cursor = {
+            let page_data_lock = &mut *page_data.lock().unwrap();
+
+            if let Some(page_data) = page_data_lock {
+                Some(page_data.next_page.clone())
+            } else {
+                None
+            }
+        };
+
         let posts_req = GetPosts {
             type_: Some(listing_type),
             sort: Some(lemmy_api_common::lemmy_db_schema::SortType::Hot),
-            page_cursor: Some(cursor.lock().unwrap().clone()),
+            page_cursor: cursor,
             limit: Some(20),
             ..Default::default()
         };
 
         let req = ctx
             .client
-            .get("http://slrpnk.net/api/v3/post/list")
+            .get(format!(
+                "https://{}/api/v3/post/list",
+                ctx.config.connection.instance
+            ))
             .query(&posts_req);
 
         let page: GetPostsResponse = req.send().await.unwrap().json().await.unwrap();
@@ -96,8 +93,14 @@ impl Page {
             .map(|post| LemmynatorPost::from_lemmy_post(post, Arc::clone(&ctx)))
             .collect();
 
-        posts.lock().unwrap().append(&mut new_posts);
-        *cursor.lock().unwrap() = page.next_page.unwrap();
+        let page_data_lock = &mut *page_data.lock().unwrap();
+        if let Some(page_data) = page_data_lock {
+            page_data.posts.append(&mut new_posts);
+            page_data.next_page = page.next_page.unwrap();
+        } else {
+            *page_data_lock = Some(PageData::new(new_posts, page.next_page.unwrap()));
+        }
+
         atomic_lock.store(true, Ordering::SeqCst);
         ctx.action_tx.send(Action::Render).unwrap();
     }
@@ -140,66 +143,100 @@ impl Component for Page {
     }
 
     fn render(&mut self, f: &mut Frame, rect: Rect) {
-        self.update_count_of_currently_displaying(rect);
+        let [posts_rect, bottom_bar_rect] =
+            Layout::vertical([Constraint::Percentage(100), Constraint::Length(1)]).areas(rect);
+
+        self.update_count_of_currently_displaying(posts_rect);
         let blocks_count = rect.height / 8;
 
-        let main_rect = rect;
+        let main_rect = posts_rect;
         let mut size_occupied = 0;
-        let mut rect_pool = rect;
+        let mut rect_pool = posts_rect;
         let mut rects = vec![];
 
-        let mut posts_lock = self.posts.lock().unwrap();
+        let mut page_data_lock = self.page_data.lock().unwrap();
 
-        if posts_lock.len() < self.posts_offset + blocks_count as usize {
-            // Can't render a full page. Fetch new pages then and return.
-            Self::try_fetch_new_pages(&self);
-            return;
-        }
+        if let Some(page_data) = &mut *page_data_lock {
+            let current_page = self.posts_offset / self.currently_displaying as usize;
+            if current_page > 3 {
+                page_data
+                    .posts
+                    .drain(0..2 * self.currently_displaying as usize);
+                self.posts_offset -= self.currently_displaying as usize * 2;
+            }
 
-        let offseted_posts = &mut posts_lock[self.posts_offset..];
+            if page_data.posts.len() < self.posts_offset + blocks_count as usize {
+                // Can't render a full page. Fetch new pages and return.
+                Self::try_fetch_new_pages(self);
+                return;
+            }
 
-        if let None = offseted_posts.get(2 * blocks_count as usize) {
-            // We are getting near the end of available pages, fetch new pages then
-            Self::try_fetch_new_pages(&self);
-        }
+            let offseted_posts = &mut page_data.posts[self.posts_offset..];
 
-        let posts = &mut offseted_posts[..blocks_count as usize];
+            if offseted_posts.get(2 * blocks_count as usize).is_none() {
+                // We are getting near the end of available pages, fetch new pages then
+                Self::try_fetch_new_pages(self);
+            }
 
-        for (index, post) in posts.into_iter().enumerate() {
-            let vertical_length = {
-                if post.is_body_empty && !post.is_image_only() {
-                    size_occupied += 5;
-                    5
-                } else {
-                    size_occupied += 8;
-                    8
+            let posts = &mut offseted_posts[..blocks_count as usize];
+
+            for (index, post) in posts.iter_mut().enumerate() {
+                let vertical_length = {
+                    if post.body.is_empty() && !post.is_image_only() {
+                        size_occupied += 5;
+                        5
+                    } else if let Some(image_is_wide) = post.image_is_wide() {
+                        if image_is_wide {
+                            size_occupied += 7;
+                            7
+                        } else {
+                            size_occupied += 8;
+                            8
+                        }
+                    } else {
+                        size_occupied += 7;
+                        7
+                    }
+                };
+                let layout = Layout::vertical(vec![
+                    Constraint::Length(vertical_length),
+                    Constraint::Percentage(100),
+                ])
+                .split(rect_pool);
+
+                rects.push(layout[0]);
+                rect_pool = layout[1];
+
+                if self.currently_focused == index as u8 {
+                    post.is_focused = true;
                 }
-            };
-            let layout = Layout::vertical(vec![
-                Constraint::Length(vertical_length),
-                Constraint::Percentage(100),
-            ])
-            .split(rect_pool);
-
-            rects.push(layout[0]);
-            rect_pool = layout[1];
-
-            if post.is_body_empty {}
-            if self.currently_focused == index as u8 {
-                post.is_focused = true;
-            }
-        }
-
-        let mut current_offset = 0;
-        for (post, mut rect) in posts.into_iter().zip(rects.into_iter()) {
-            if main_rect.height - size_occupied > blocks_count {
-                current_offset += 1;
-                rect.y += current_offset;
             }
 
-            post.render(f, rect);
+            let mut current_offset = 0;
+            for (post, mut rect) in posts.iter_mut().zip(rects.into_iter()) {
+                if main_rect.height - size_occupied > blocks_count {
+                    current_offset += 1;
+                    rect.y += current_offset;
+                }
 
-            post.is_focused = false;
+                post.render(f, rect);
+
+                post.is_focused = false;
+            }
+
+            let current_page_paragraph = Paragraph::new(format!(
+                "{} /  | All: {}",
+                (self.posts_offset / self.currently_displaying as usize) + 1,
+                page_data.posts.len() / self.currently_displaying as usize
+            ))
+            .alignment(Alignment::Center);
+            f.render_widget(current_page_paragraph, bottom_bar_rect);
+        } else {
+            drop(page_data_lock);
+            self.try_fetch_new_pages();
+            let loading_rect = centered_rect(main_rect, 50, 1);
+            let loading_paragraph = Paragraph::new("").alignment(Alignment::Center);
+            f.render_widget(loading_paragraph, loading_rect);
         }
     }
 }
@@ -213,8 +250,7 @@ impl Page {
             Ordering::SeqCst,
         ) {
             tokio::task::spawn(Self::fetch_next_page(
-                Arc::clone(&self.next_page),
-                Arc::clone(&self.posts),
+                Arc::clone(&self.page_data),
                 Arc::clone(&self.can_fetch_new_pages),
                 Arc::clone(&self.ctx),
                 self.listing_type,

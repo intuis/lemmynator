@@ -7,7 +7,7 @@ use anyhow::Result;
 use app::App;
 use ln_config::Config;
 
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread", worker_threads = 2)]
 async fn main() -> Result<()> {
     let config = Config::init()?;
 

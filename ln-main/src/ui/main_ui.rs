@@ -10,20 +10,19 @@ use super::{
     page::Page,
 };
 
+use anyhow::Result;
 use lemmy_api_common::{lemmy_db_schema::ListingType, person::GetUnreadCountResponse};
 use ratatui::{prelude::*, widgets::Paragraph};
 
 pub struct MainWindow {
     posts_viewer: PostsComponent,
-    ctx: Arc<Ctx>,
 }
 
 impl MainWindow {
-    pub async fn new(ctx: Arc<Ctx>) -> Self {
-        Self {
-            posts_viewer: PostsComponent::new(Arc::clone(&ctx)).await,
-            ctx: Arc::clone(&ctx),
-        }
+    pub async fn new(ctx: Arc<Ctx>) -> Result<Self> {
+        Ok(Self {
+            posts_viewer: PostsComponent::new(Arc::clone(&ctx)).await?,
+        })
     }
 }
 
@@ -37,17 +36,17 @@ impl Component for MainWindow {
     }
 }
 
+// TODO: make this struct a MainWindow later
 struct PostsComponent {
     tabs: TabComponent,
     top_bar: TopBar,
     subscribed_page: Page,
     local_page: Page,
     all_page: Page,
-    ctx: Arc<Ctx>,
 }
 
 impl PostsComponent {
-    async fn new(ctx: Arc<Ctx>) -> Self {
+    async fn new(ctx: Arc<Ctx>) -> Result<Self> {
         let unread_counts: GetUnreadCountResponse = ctx
             .client
             .get(format!(
@@ -55,25 +54,17 @@ impl PostsComponent {
                 ctx.config.connection.instance
             ))
             .send()
-            .await
-            .unwrap()
+            .await?
             .json()
-            .await
-            .unwrap();
+            .await?;
 
-        Self {
+        Ok(Self {
             tabs: TabComponent::new(Arc::clone(&ctx)),
-            top_bar: TopBar::new(
-                Arc::clone(&ctx),
-                ctx.config.connection.username.clone(),
-                unread_counts,
-            )
-            .await,
-            subscribed_page: Page::new(ListingType::Subscribed, Arc::clone(&ctx)).await,
-            local_page: Page::new(ListingType::Local, Arc::clone(&ctx)).await,
-            all_page: Page::new(ListingType::All, Arc::clone(&ctx)).await,
-            ctx,
-        }
+            top_bar: TopBar::new(Arc::clone(&ctx), unread_counts).await,
+            subscribed_page: Page::new(ListingType::Subscribed, Arc::clone(&ctx)).await?,
+            local_page: Page::new(ListingType::Local, Arc::clone(&ctx)).await?,
+            all_page: Page::new(ListingType::All, Arc::clone(&ctx)).await?,
+        })
     }
 }
 
@@ -112,18 +103,13 @@ impl Component for PostsComponent {
 }
 
 struct TopBar {
-    username: String,
     unread_counts: GetUnreadCountResponse,
     ctx: Arc<Ctx>,
 }
 
 impl TopBar {
-    async fn new(ctx: Arc<Ctx>, username: String, unread_counts: GetUnreadCountResponse) -> Self {
-        Self {
-            username,
-            ctx,
-            unread_counts,
-        }
+    async fn new(ctx: Arc<Ctx>, unread_counts: GetUnreadCountResponse) -> Self {
+        Self { ctx, unread_counts }
     }
 
     fn total_unreads(&self) -> i64 {
@@ -146,7 +132,10 @@ impl TopBar {
             }
         });
 
-        spans.push(Span::raw(format!("  {} ", &self.username)));
+        spans.push(Span::raw(format!(
+            "   {}  ",
+            &self.ctx.config.connection.username
+        )));
         Line::from(spans)
     }
 }
@@ -158,6 +147,10 @@ impl Component for TopBar {
 
     fn render(&mut self, f: &mut Frame, rect: Rect) {
         let paragraph = Paragraph::new(self.menu_text()).right_aligned();
+        f.render_widget(paragraph, rect);
+
+        let paragraph =
+            Paragraph::new(format!(" {}", &*self.ctx.config.connection.instance)).left_aligned();
         f.render_widget(paragraph, rect);
     }
 }

@@ -1,7 +1,4 @@
-use std::{
-    rc::Rc,
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 
 use lemmy_api_common::{
     person::{Login, LoginResponse},
@@ -29,7 +26,6 @@ pub struct App {
     action_rx: UnboundedReceiver<Action>,
     main_window: MainWindow,
     mode: Mode,
-    ctx: Arc<Ctx>,
 }
 
 pub struct Ctx {
@@ -82,11 +78,10 @@ impl App {
 
         Ok(Self {
             should_quit: false,
-            main_window: MainWindow::new(Arc::clone(&ctx)).await,
+            main_window: MainWindow::new(Arc::clone(&ctx)).await?,
             action_tx,
             action_rx,
             mode: Mode::Normal,
-            ctx,
         })
     }
 
@@ -95,6 +90,7 @@ impl App {
 
         tui.enter()?;
 
+        self.render(&mut tui)?;
         self.main_loop(&mut tui).await?;
 
         tui.exit()?;

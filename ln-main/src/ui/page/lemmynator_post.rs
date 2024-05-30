@@ -15,7 +15,7 @@ use crate::ui::components::Component;
 
 pub struct LemmynatorPost {
     name: String,
-    body: String,
+    pub body: String,
     pub is_focused: bool,
     image_data: Arc<Mutex<Option<ImageData>>>,
     embed_url: Option<url::Url>,
@@ -24,7 +24,6 @@ pub struct LemmynatorPost {
     counts: LemmynatorCounts,
     is_featured_local: bool,
     is_featured_community: bool,
-    pub is_body_empty: bool,
     ctx: Arc<Ctx>,
 }
 
@@ -69,7 +68,6 @@ impl LemmynatorPost {
 
         LemmynatorPost {
             name: lemmy_post.post.name,
-            is_body_empty: body.is_empty(),
             body,
             community: lemmy_post.community.name,
             author: lemmy_post.creator.name,
@@ -100,6 +98,12 @@ impl LemmynatorPost {
             .collect()
     }
 
+    pub fn image_is_wide(&self) -> Option<bool> {
+        (*self.image_data.lock().unwrap())
+            .as_ref()
+            .map(|image_data| image_data.dimensions.0 > image_data.dimensions.1)
+    }
+
     pub fn is_image_only(&self) -> bool {
         self.body.is_empty() && self.image_data.lock().unwrap().is_some()
     }
@@ -116,7 +120,6 @@ impl LemmynatorPost {
                 .unwrap()
                 .decode();
             if let Ok(dyn_image) = dyn_image_res {
-                dyn_image.dimensions();
                 Some(ImageData {
                     dimensions: dyn_image.dimensions(),
                     image: ctx.picker.lock().unwrap().new_resize_protocol(dyn_image),
@@ -176,7 +179,6 @@ impl Component for LemmynatorPost {
                         Self::wrap_line(line, max_width)
                     } else {
                         vec![Line::from(Self::parse_markdown_url(line))]
-                        // vec![Line::raw(line)]
                     }
                 })
                 .collect();
@@ -259,6 +261,14 @@ impl LemmynatorPost {
     fn header(&self) -> Line {
         let mut spans = vec![];
 
+        if self.is_focused {
+            let highlight_symbol = if self.is_image_only() { "> " } else { ">" };
+            spans.push(Span::styled(
+                highlight_symbol,
+                Style::new().fg(self.ctx.config.general.accent_color.as_ratatui()),
+            ));
+        }
+
         if self.is_image_only() {
             spans.push(Span::styled(" ", Style::new().white()));
         }
@@ -271,7 +281,7 @@ impl LemmynatorPost {
             spans.push(Span::styled(" 󰐃", Style::new().green()))
         }
 
-        if self.name.len() > 45 {
+        if self.name.chars().count() > 45 {
             let last_char_indice = self.name.char_indices().map(|(i, _)| i).nth(45).unwrap();
 
             spans.push(Span::styled(
@@ -287,6 +297,13 @@ impl LemmynatorPost {
 
         if let Some(url) = &self.embed_url {
             if let Some(host) = url.host_str() {
+                let host = {
+                    if let Some(stripped_host) = host.strip_prefix("www.") {
+                        stripped_host
+                    } else {
+                        host
+                    }
+                };
                 spans.push(Span::styled(format!(" {} ", host), Style::new().white()))
             }
         }

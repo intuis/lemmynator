@@ -52,7 +52,7 @@ pub enum Color {
 
 impl Color {
     #[must_use]
-    pub fn as_ratatui(&self) -> ratatui::style::Color {
+    pub const fn as_ratatui(&self) -> ratatui::style::Color {
         use ratatui::style::Color as RColor;
         use Color::*;
         match self {

@@ -31,7 +31,6 @@ pub enum Mode {
 
 pub fn event_to_action(mode: Mode, event: Event) -> Option<Action> {
     match event {
-        Event::Quit => Some(Action::Quit),
         Event::Error => todo!(),
         Event::Render => Some(Action::Render),
         Event::Key(key) if matches!(mode, Mode::Input) => Some(Action::Input(key)),
