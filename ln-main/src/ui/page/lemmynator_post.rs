@@ -1,4 +1,5 @@
 use std::io::Cursor;
+use std::ops::Index;
 use std::sync::{Arc, Mutex};
 
 use image::GenericImageView;
@@ -178,7 +179,12 @@ impl Component for LemmynatorPost {
                         let max_width = text_rect.width - 2;
                         Self::wrap_line(line, max_width)
                     } else {
-                        vec![Line::from(Self::parse_markdown_url(line))]
+                        vec![Line::from(
+                            Self::parse_markdown_url(line)
+                                .into_iter()
+                                .map(|markdown| Span::from(markdown))
+                                .collect::<Vec<_>>(),
+                        )]
                     }
                 })
                 .collect();
@@ -347,28 +353,68 @@ impl LemmynatorPost {
         wrapped_lines
     }
 
-    fn parse_markdown_url(text: &str) -> Vec<Span<'_>> {
-        let link_regex = regex::Regex::new(r"\[([^\]]+)\]\(([^)]+)\)").unwrap();
-        let mut parsed_spans = Vec::new();
-        let mut last_index = 0;
-
-        for capture in link_regex.captures_iter(text) {
-            let full_match = capture.get(0).unwrap();
-            let link_text = capture.get(1).unwrap().as_str();
-            // let url = capture.get(2).unwrap().as_str();
-
-            parsed_spans.push(Span::styled(
-                &text[last_index..full_match.start()],
-                Style::new().white(),
-            ));
-            parsed_spans.push(Span::styled(
-                link_text,
-                Style::new().fg(Color::Cyan).underlined(),
-            ));
-            last_index = full_match.end();
+    fn parse_markdown_url(text: &str) -> Vec<Markdown> {
+        if text.is_empty() {
+            return vec![];
         }
 
-        parsed_spans.push(Span::styled(&text[last_index..], Style::new().white()));
-        parsed_spans
+        let link_regex = regex::Regex::new(r"\[([^\]]+)\]\(([^)]+)\)").unwrap();
+        let bold_regex = regex::Regex::new(r"\*\*(.*?)\*\*").unwrap();
+        let italic_regex = regex::Regex::new(r"_(.*?)_").unwrap();
+
+        let mut parsed_markdown = vec![];
+
+        if let Some(capture) = link_regex.captures(text) {
+            let full_match = capture.get(0).unwrap();
+            let link_text = capture.get(1).unwrap().as_str();
+            // TODO: implement when unstable widget ref is stable and create hyperlink widget with this
+            // let url = capture.get(2).unwrap().as_str();
+
+            parsed_markdown.append(&mut Self::parse_markdown_url(&text[..full_match.start()]));
+            parsed_markdown.push(Markdown::Url(link_text.to_string()));
+            parsed_markdown.append(&mut Self::parse_markdown_url(&text[full_match.end()..]));
+            return parsed_markdown;
+        };
+
+        if let Some(capture) = bold_regex.captures(text) {
+            let full_match = capture.get(0).unwrap();
+            let bold_text = capture.get(1).unwrap().as_str();
+
+            parsed_markdown.append(&mut Self::parse_markdown_url(&text[..full_match.start()]));
+            parsed_markdown.push(Markdown::Bold(bold_text.to_string()));
+            parsed_markdown.append(&mut Self::parse_markdown_url(&text[full_match.end()..]));
+            return parsed_markdown;
+        };
+
+        if let Some(capture) = italic_regex.captures(text) {
+            let full_match = capture.get(0).unwrap();
+            let italic_text = capture.get(1).unwrap().as_str();
+
+            parsed_markdown.append(&mut Self::parse_markdown_url(&text[..full_match.start()]));
+            parsed_markdown.push(Markdown::Italic(italic_text.to_string()));
+            parsed_markdown.append(&mut Self::parse_markdown_url(&text[full_match.end()..]));
+            return parsed_markdown;
+        };
+
+        parsed_markdown.push(Markdown::Text(text.to_string()));
+        parsed_markdown
+    }
+}
+
+enum Markdown {
+    Url(String),
+    Bold(String),
+    Italic(String),
+    Text(String),
+}
+
+impl From<Markdown> for Span<'_> {
+    fn from(value: Markdown) -> Self {
+        match value {
+            Markdown::Url(url) => Span::styled(url, Style::new().fg(Color::LightBlue).underlined()),
+            Markdown::Bold(text) => Span::styled(text, Style::new().bold()),
+            Markdown::Italic(text) => Span::styled(text, Style::new().italic()),
+            Markdown::Text(text) => Span::raw(text),
+        }
     }
 }
