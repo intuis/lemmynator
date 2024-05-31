@@ -11,7 +11,7 @@ use lemmy_api_common::{
     lemmy_db_views::structs::PaginationCursor,
     post::{GetPosts, GetPostsResponse},
 };
-use ratatui::{layout::Offset, prelude::*, widgets::Paragraph};
+use ratatui::{prelude::*, widgets::Paragraph};
 
 use crate::{action::Action, app::Ctx};
 
@@ -147,7 +147,6 @@ impl Component for Page {
             Layout::vertical([Constraint::Percentage(100), Constraint::Length(1)]).areas(rect);
 
         self.update_count_of_currently_displaying(posts_rect);
-        let blocks_count = rect.height / 8;
 
         let main_rect = posts_rect;
         let mut size_occupied = 0;
@@ -165,7 +164,7 @@ impl Component for Page {
                 self.posts_offset -= self.currently_displaying as usize * 2;
             }
 
-            if page_data.posts.len() < self.posts_offset + blocks_count as usize {
+            if page_data.posts.len() < self.posts_offset + self.currently_displaying as usize {
                 // Can't render a full page. Fetch new pages and return.
                 Self::try_fetch_new_pages(self);
                 return;
@@ -173,12 +172,15 @@ impl Component for Page {
 
             let offseted_posts = &mut page_data.posts[self.posts_offset..];
 
-            if offseted_posts.get(2 * blocks_count as usize).is_none() {
+            if offseted_posts
+                .get(2 * self.currently_displaying as usize)
+                .is_none()
+            {
                 // We are getting near the end of available pages, fetch new pages then
                 Self::try_fetch_new_pages(self);
             }
 
-            let posts = &mut offseted_posts[..blocks_count as usize];
+            let posts = &mut offseted_posts[..self.currently_displaying as usize];
 
             for (index, post) in posts.iter_mut().enumerate() {
                 let vertical_length = {
@@ -214,7 +216,7 @@ impl Component for Page {
 
             let mut current_offset = 0;
             for (post, mut rect) in posts.iter_mut().zip(rects.into_iter()) {
-                if main_rect.height - size_occupied > blocks_count {
+                if main_rect.height - size_occupied > self.currently_displaying as u16 {
                     current_offset += 1;
                     rect.y += current_offset;
                 }
@@ -225,9 +227,10 @@ impl Component for Page {
             }
 
             let current_page_paragraph = Paragraph::new(format!(
-                "{} /  | All: {}",
+                "{} /  | All: {} | Currently displaying: {}",
                 (self.posts_offset / self.currently_displaying as usize) + 1,
-                page_data.posts.len() / self.currently_displaying as usize
+                page_data.posts.len() / self.currently_displaying as usize,
+                self.currently_displaying,
             ))
             .alignment(Alignment::Center);
             f.render_widget(current_page_paragraph, bottom_bar_rect);

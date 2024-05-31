@@ -1,5 +1,4 @@
 use std::io::Cursor;
-use std::ops::Index;
 use std::sync::{Arc, Mutex};
 
 use image::GenericImageView;
@@ -221,7 +220,7 @@ impl LemmynatorPost {
             .border_style(self.border_style())
             .title(Title::from(self.header()).alignment(Alignment::Left))
             .title(
-                Title::from(self.footer_right())
+                Title::from(self.footer())
                     .alignment(Alignment::Right)
                     .position(Position::Bottom),
             )
@@ -235,8 +234,8 @@ impl LemmynatorPost {
         }
     }
 
-    fn footer_right(&self) -> Line {
-        let spans = vec![
+    fn footer(&self) -> Line {
+        let mut spans = vec![
             Span::styled(
                 format!(" c/{}   u/{}  ", self.community, self.author),
                 Style::new().white(),
@@ -251,12 +250,14 @@ impl LemmynatorPost {
             ),
         ];
 
+        if self.is_focused {
+            spans.push(Span::raw("<"));
+        }
+
         let line = if self.is_focused {
-            let spans: Vec<_> = spans
-                .into_iter()
-                .map(|span| span.patch_style(Style::new().bold()))
-                .collect();
-            Line::default().spans(spans)
+            Line::default()
+                .spans(spans)
+                .patch_style(Style::new().bold())
         } else {
             Line::default().spans(spans)
         };
