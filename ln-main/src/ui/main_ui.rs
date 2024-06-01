@@ -7,7 +7,7 @@ use super::{
         tabs::{CurrentTab, TabComponent},
         Component,
     },
-    page::Page,
+    listing::Listing,
 };
 
 use anyhow::Result;
@@ -40,9 +40,9 @@ impl Component for MainWindow {
 struct PostsComponent {
     tabs: TabComponent,
     top_bar: TopBar,
-    subscribed_page: Page,
-    local_page: Page,
-    all_page: Page,
+    subscribed_page: Listing,
+    local_page: Listing,
+    all_page: Listing,
 }
 
 impl PostsComponent {
@@ -61,9 +61,9 @@ impl PostsComponent {
         Ok(Self {
             tabs: TabComponent::new(Arc::clone(&ctx)),
             top_bar: TopBar::new(Arc::clone(&ctx), unread_counts).await,
-            subscribed_page: Page::new(ListingType::Subscribed, Arc::clone(&ctx)).await?,
-            local_page: Page::new(ListingType::Local, Arc::clone(&ctx)).await?,
-            all_page: Page::new(ListingType::All, Arc::clone(&ctx)).await?,
+            subscribed_page: Listing::new(ListingType::Subscribed, Arc::clone(&ctx)).await?,
+            local_page: Listing::new(ListingType::Local, Arc::clone(&ctx)).await?,
+            all_page: Listing::new(ListingType::All, Arc::clone(&ctx)).await?,
         })
     }
 }
