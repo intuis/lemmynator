@@ -137,9 +137,6 @@ impl Page {
         let page_data = page_data.as_mut().unwrap();
 
         let main_rect = rect;
-        let mut size_occupied = 0;
-        let mut rect_pool = rect;
-        let mut rects = vec![];
 
         let current_page = self.posts_offset / self.currently_displaying as usize;
         if current_page > 3 {
@@ -165,23 +162,33 @@ impl Page {
             Self::try_fetch_new_pages(self);
         }
 
-        let posts = &mut offseted_posts[..self.currently_displaying as usize];
+        let posts_to_display = &mut offseted_posts[..self.currently_displaying as usize];
 
-        for (index, post) in posts.iter_mut().enumerate() {
+        let mut rects = self.rects_for_posts(&posts_to_display, rect);
+        let size_occupied = rects
+            .iter()
+            .map(|rect| rect.height)
+            .fold(0, |acc, height| acc + height);
+
+        let space_for_padding_available =
+            main_rect.height - size_occupied > self.currently_displaying as u16;
+
+        self.render_posts_in_layout(f, posts_to_display, &mut rects, space_for_padding_available);
+    }
+
+    fn rects_for_posts(&self, posts: &[LemmynatorPost], mut rect_pool: Rect) -> Vec<Rect> {
+        let mut rects = vec![];
+        for post in posts {
             let vertical_length = {
                 if post.body.is_empty() && !post.is_image_only() {
-                    size_occupied += 5;
                     5
                 } else if let Some(image_is_wide) = post.image_is_wide() {
                     if image_is_wide {
-                        size_occupied += 7;
                         7
                     } else {
-                        size_occupied += 8;
                         8
                     }
                 } else {
-                    size_occupied += 7;
                     7
                 }
             };
@@ -193,22 +200,34 @@ impl Page {
 
             rects.push(layout[0]);
             rect_pool = layout[1];
-
-            if self.currently_focused == index as u8 {
-                post.is_focused = true;
-            }
         }
 
+        rects
+    }
+
+    fn render_posts_in_layout(
+        &self,
+        f: &mut Frame,
+        posts: &mut [LemmynatorPost],
+        rects: &mut [Rect],
+        space_for_padding_available: bool,
+    ) {
         let mut current_offset = 0;
-        for (post, mut rect) in posts.iter_mut().zip(rects.into_iter()) {
-            if main_rect.height - size_occupied > self.currently_displaying as u16 {
+        let mut index = 0;
+        for (post, rect) in posts.iter_mut().zip(rects.into_iter()) {
+            if space_for_padding_available {
                 current_offset += 1;
                 rect.y += current_offset;
             }
 
-            post.render(f, rect);
+            if self.currently_focused == index as u8 {
+                post.is_focused = true;
+            }
+
+            post.render(f, *rect);
 
             post.is_focused = false;
+            index += 1;
         }
     }
 
