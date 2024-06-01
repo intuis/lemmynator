@@ -13,11 +13,9 @@ use lemmy_api_common::{
 };
 use ratatui::{prelude::*, widgets::Paragraph};
 
-use crate::{action::Action, app::Ctx};
-
 use self::lemmynator_post::LemmynatorPost;
-
 use super::{centered_rect, components::Component};
+use crate::{action::Action, app::Ctx};
 
 pub struct Page {
     listing_type: ListingType,
@@ -125,6 +123,105 @@ impl Page {
     fn update_count_of_currently_displaying(&mut self, rect: Rect) {
         self.currently_displaying = (rect.height / 8) as u8;
     }
+
+    fn render_loading_screen(&mut self, f: &mut Frame, rect: Rect) {
+        let loading_rect = centered_rect(rect, 50, 1);
+        let loading_paragraph = Paragraph::new("").alignment(Alignment::Center);
+        f.render_widget(loading_paragraph, loading_rect);
+    }
+
+    fn render_posts(&mut self, f: &mut Frame, rect: Rect) {
+        self.update_count_of_currently_displaying(rect);
+
+        let page_data = &mut self.page_data.lock().unwrap();
+        let page_data = page_data.as_mut().unwrap();
+
+        let main_rect = rect;
+        let mut size_occupied = 0;
+        let mut rect_pool = rect;
+        let mut rects = vec![];
+
+        let current_page = self.posts_offset / self.currently_displaying as usize;
+        if current_page > 3 {
+            page_data
+                .posts
+                .drain(0..2 * self.currently_displaying as usize);
+            self.posts_offset -= self.currently_displaying as usize * 2;
+        }
+
+        if page_data.posts.len() < self.posts_offset + self.currently_displaying as usize {
+            // Can't render a full page. Fetch new pages and return.
+            Self::try_fetch_new_pages(self);
+            return;
+        }
+
+        let offseted_posts = &mut page_data.posts[self.posts_offset..];
+
+        if offseted_posts
+            .get(2 * self.currently_displaying as usize)
+            .is_none()
+        {
+            // We are getting near the end of available pages, fetch new pages then
+            Self::try_fetch_new_pages(self);
+        }
+
+        let posts = &mut offseted_posts[..self.currently_displaying as usize];
+
+        for (index, post) in posts.iter_mut().enumerate() {
+            let vertical_length = {
+                if post.body.is_empty() && !post.is_image_only() {
+                    size_occupied += 5;
+                    5
+                } else if let Some(image_is_wide) = post.image_is_wide() {
+                    if image_is_wide {
+                        size_occupied += 7;
+                        7
+                    } else {
+                        size_occupied += 8;
+                        8
+                    }
+                } else {
+                    size_occupied += 7;
+                    7
+                }
+            };
+            let layout = Layout::vertical(vec![
+                Constraint::Length(vertical_length),
+                Constraint::Percentage(100),
+            ])
+            .split(rect_pool);
+
+            rects.push(layout[0]);
+            rect_pool = layout[1];
+
+            if self.currently_focused == index as u8 {
+                post.is_focused = true;
+            }
+        }
+
+        let mut current_offset = 0;
+        for (post, mut rect) in posts.iter_mut().zip(rects.into_iter()) {
+            if main_rect.height - size_occupied > self.currently_displaying as u16 {
+                current_offset += 1;
+                rect.y += current_offset;
+            }
+
+            post.render(f, rect);
+
+            post.is_focused = false;
+        }
+    }
+
+    fn render_bottom_bar(&mut self, f: &mut Frame, rect: Rect) {
+        if self.currently_displaying != 0 {
+            let current_page_paragraph = Paragraph::new(format!(
+                "{} / ",
+                (self.posts_offset / self.currently_displaying as usize) + 1,
+            ))
+            .alignment(Alignment::Center);
+            f.render_widget(current_page_paragraph, rect);
+        }
+    }
 }
 
 impl Component for Page {
@@ -146,101 +243,25 @@ impl Component for Page {
         let [posts_rect, bottom_bar_rect] =
             Layout::vertical([Constraint::Percentage(100), Constraint::Length(1)]).areas(rect);
 
-        self.update_count_of_currently_displaying(posts_rect);
-
-        let main_rect = posts_rect;
-        let mut size_occupied = 0;
-        let mut rect_pool = posts_rect;
-        let mut rects = vec![];
-
-        let mut page_data_lock = self.page_data.lock().unwrap();
-
-        if let Some(page_data) = &mut *page_data_lock {
-            let current_page = self.posts_offset / self.currently_displaying as usize;
-            if current_page > 3 {
-                page_data
-                    .posts
-                    .drain(0..2 * self.currently_displaying as usize);
-                self.posts_offset -= self.currently_displaying as usize * 2;
-            }
-
+        let mut pages_available;
+        if let Some(page_data) = &*self.page_data.lock().unwrap() {
+            pages_available = true;
             if page_data.posts.len() < self.posts_offset + self.currently_displaying as usize {
-                // Can't render a full page. Fetch new pages and return.
                 Self::try_fetch_new_pages(self);
-                return;
+                pages_available = false;
             }
-
-            let offseted_posts = &mut page_data.posts[self.posts_offset..];
-
-            if offseted_posts
-                .get(2 * self.currently_displaying as usize)
-                .is_none()
-            {
-                // We are getting near the end of available pages, fetch new pages then
-                Self::try_fetch_new_pages(self);
-            }
-
-            let posts = &mut offseted_posts[..self.currently_displaying as usize];
-
-            for (index, post) in posts.iter_mut().enumerate() {
-                let vertical_length = {
-                    if post.body.is_empty() && !post.is_image_only() {
-                        size_occupied += 5;
-                        5
-                    } else if let Some(image_is_wide) = post.image_is_wide() {
-                        if image_is_wide {
-                            size_occupied += 7;
-                            7
-                        } else {
-                            size_occupied += 8;
-                            8
-                        }
-                    } else {
-                        size_occupied += 7;
-                        7
-                    }
-                };
-                let layout = Layout::vertical(vec![
-                    Constraint::Length(vertical_length),
-                    Constraint::Percentage(100),
-                ])
-                .split(rect_pool);
-
-                rects.push(layout[0]);
-                rect_pool = layout[1];
-
-                if self.currently_focused == index as u8 {
-                    post.is_focused = true;
-                }
-            }
-
-            let mut current_offset = 0;
-            for (post, mut rect) in posts.iter_mut().zip(rects.into_iter()) {
-                if main_rect.height - size_occupied > self.currently_displaying as u16 {
-                    current_offset += 1;
-                    rect.y += current_offset;
-                }
-
-                post.render(f, rect);
-
-                post.is_focused = false;
-            }
-
-            let current_page_paragraph = Paragraph::new(format!(
-                "{} /  | All: {} | Currently displaying: {}",
-                (self.posts_offset / self.currently_displaying as usize) + 1,
-                page_data.posts.len() / self.currently_displaying as usize,
-                self.currently_displaying,
-            ))
-            .alignment(Alignment::Center);
-            f.render_widget(current_page_paragraph, bottom_bar_rect);
         } else {
-            drop(page_data_lock);
-            self.try_fetch_new_pages();
-            let loading_rect = centered_rect(main_rect, 50, 1);
-            let loading_paragraph = Paragraph::new("").alignment(Alignment::Center);
-            f.render_widget(loading_paragraph, loading_rect);
+            pages_available = false;
         }
+
+        if pages_available {
+            self.render_posts(f, posts_rect)
+        } else {
+            self.try_fetch_new_pages();
+            self.render_loading_screen(f, posts_rect);
+        }
+
+        self.render_bottom_bar(f, bottom_bar_rect)
     }
 }
 

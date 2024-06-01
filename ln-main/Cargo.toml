@@ -16,6 +16,7 @@ image = { version = "*", features = ["webp", "png", "gif"] }
 bytes = "*"
 url = "2"
 regex = "1"
+mockall = "0.12"
 
 # Async
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync"] }
