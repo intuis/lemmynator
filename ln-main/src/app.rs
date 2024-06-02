@@ -49,7 +49,10 @@ impl App {
         };
 
         let res: LoginResponse = client
-            .post("https://slrpnk.net/api/v3/user/login")
+            .post(format!(
+                "https://{}/api/v3/user/login",
+                config.connection.instance
+            ))
             .json(&login_req)
             .send()
             .await?
