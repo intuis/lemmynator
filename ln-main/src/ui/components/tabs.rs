@@ -47,6 +47,17 @@ impl TabComponent {
             ctx,
         }
     }
+
+    pub fn current_sort(&self) -> SortType {
+        *self
+            .sort_hash
+            .get(&self.current_tab)
+            .unwrap_or(&SortType::Hot)
+    }
+
+    pub fn current_listing_type(&self) -> ListingType {
+        self.current_tab.as_listing_type()
+    }
 }
 
 fn sort_type_index(sort_type: SortType) -> usize {
@@ -75,11 +86,6 @@ impl Component for TabComponent {
             .select(self.current_tab as usize)
             .divider(symbols::DOT);
 
-        let current_sort = self
-            .sort_hash
-            .entry(self.current_tab)
-            .or_insert(SortType::Hot);
-
         let sort_type_rect = Layout::horizontal([Constraint::Length(59)])
             .flex(Flex::Center)
             .split(sort_type_rect)[0];
@@ -87,7 +93,7 @@ impl Component for TabComponent {
         let sort_type_tabs = Tabs::new(self.tabs_sort)
             .style(Style::default().white())
             .highlight_style(Style::default().fg(Color::Yellow))
-            .select(sort_type_index(*current_sort))
+            .select(sort_type_index(self.current_sort()))
             .divider(symbols::DOT);
 
         f.render_widget(listing_type_tabs, listing_type_rect);

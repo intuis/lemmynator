@@ -1,8 +1,4 @@
-use std::{
-    collections::HashMap,
-    sync::{atomic::Ordering, Arc},
-    time::Duration,
-};
+use std::{collections::HashMap, sync::Arc};
 
 use crate::{action::Action, app::Ctx};
 
@@ -15,10 +11,7 @@ use super::{
 };
 
 use anyhow::Result;
-use lemmy_api_common::{
-    lemmy_db_schema::{ListingType, SortType},
-    person::GetUnreadCountResponse,
-};
+use lemmy_api_common::{lemmy_db_schema::SortType, person::GetUnreadCountResponse};
 use ratatui::{prelude::*, widgets::Paragraph};
 
 pub struct MainWindow {
@@ -64,31 +57,28 @@ impl PostsComponent {
             .json()
             .await?;
 
-        let default_sort_type = SortType::Hot;
+        let listings = HashMap::new();
 
-        let mut listings = HashMap::new();
-
-        listings.insert(
-            CurrentTab::Subscribed,
-            Listing::new(ListingType::Subscribed, default_sort_type, Arc::clone(&ctx)).unwrap(),
-        );
-
-        listings.insert(
-            CurrentTab::Local,
-            Listing::new(ListingType::Local, default_sort_type, Arc::clone(&ctx)).unwrap(),
-        );
-
-        listings.insert(
-            CurrentTab::All,
-            Listing::new(ListingType::All, default_sort_type, Arc::clone(&ctx)).unwrap(),
-        );
-
-        Ok(Self {
+        let mut posts_component = Self {
             tabs: TabComponent::new(Arc::clone(&ctx)),
             top_bar: TopBar::new(Arc::clone(&ctx), unread_counts).await,
             listings,
             ctx,
-        })
+        };
+
+        posts_component.populate_listings();
+
+        Ok(posts_component)
+    }
+
+    fn populate_listings(&mut self) {
+        let default_sort_type = SortType::Hot;
+
+        for tab in [CurrentTab::Subscribed, CurrentTab::Local, CurrentTab::All] {
+            let ctx = Arc::clone(&self.ctx);
+            let listing = Listing::new(tab.as_listing_type(), default_sort_type, ctx).unwrap();
+            self.listings.insert(tab, listing);
+        }
     }
 }
 
@@ -98,22 +88,23 @@ impl Component for PostsComponent {
             Action::ChangeTab(_) => self.tabs.handle_actions(action),
             Action::ChangeSort(_) => {
                 self.tabs.handle_actions(action);
-                self.listings.insert(
-                    self.tabs.current_tab,
-                    Listing::new(
-                        self.tabs.current_tab.as_listing_type(),
-                        *self.tabs.sort_hash.get(&self.tabs.current_tab).unwrap(),
-                        Arc::clone(&self.ctx),
-                    )
-                    .unwrap(),
-                );
+
+                let new_listing = Listing::new(
+                    self.tabs.current_listing_type(),
+                    self.tabs.current_sort(),
+                    Arc::clone(&self.ctx),
+                )
+                .unwrap();
+                self.listings
+                    .insert(self.tabs.current_tab, new_listing)
+                    .unwrap();
 
                 Some(Action::Render)
             }
             _ => self
                 .listings
                 .get_mut(&self.tabs.current_tab)
-                .unwrap()
+                .expect("Listings already populated")
                 .handle_actions(action),
         }
     }
@@ -134,7 +125,7 @@ impl Component for PostsComponent {
 
         self.listings
             .get_mut(&self.tabs.current_tab)
-            .unwrap()
+            .expect("Listings already populated")
             .render(f, posts_rect);
     }
 }
