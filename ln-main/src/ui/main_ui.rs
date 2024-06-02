@@ -1,4 +1,8 @@
-use std::sync::Arc;
+use std::{
+    collections::HashMap,
+    sync::{atomic::Ordering, Arc},
+    time::Duration,
+};
 
 use crate::{action::Action, app::Ctx};
 
@@ -11,7 +15,10 @@ use super::{
 };
 
 use anyhow::Result;
-use lemmy_api_common::{lemmy_db_schema::ListingType, person::GetUnreadCountResponse};
+use lemmy_api_common::{
+    lemmy_db_schema::{ListingType, SortType},
+    person::GetUnreadCountResponse,
+};
 use ratatui::{prelude::*, widgets::Paragraph};
 
 pub struct MainWindow {
@@ -40,9 +47,8 @@ impl Component for MainWindow {
 struct PostsComponent {
     tabs: TabComponent,
     top_bar: TopBar,
-    subscribed_page: Listing,
-    local_page: Listing,
-    all_page: Listing,
+    listings: HashMap<CurrentTab, Listing>,
+    ctx: Arc<Ctx>,
 }
 
 impl PostsComponent {
@@ -58,12 +64,30 @@ impl PostsComponent {
             .json()
             .await?;
 
+        let default_sort_type = SortType::Hot;
+
+        let mut listings = HashMap::new();
+
+        listings.insert(
+            CurrentTab::Subscribed,
+            Listing::new(ListingType::Subscribed, default_sort_type, Arc::clone(&ctx)).unwrap(),
+        );
+
+        listings.insert(
+            CurrentTab::Local,
+            Listing::new(ListingType::Local, default_sort_type, Arc::clone(&ctx)).unwrap(),
+        );
+
+        listings.insert(
+            CurrentTab::All,
+            Listing::new(ListingType::All, default_sort_type, Arc::clone(&ctx)).unwrap(),
+        );
+
         Ok(Self {
             tabs: TabComponent::new(Arc::clone(&ctx)),
             top_bar: TopBar::new(Arc::clone(&ctx), unread_counts).await,
-            subscribed_page: Listing::new(ListingType::Subscribed, Arc::clone(&ctx)).await?,
-            local_page: Listing::new(ListingType::Local, Arc::clone(&ctx)).await?,
-            all_page: Listing::new(ListingType::All, Arc::clone(&ctx)).await?,
+            listings,
+            ctx,
         })
     }
 }
@@ -72,17 +96,31 @@ impl Component for PostsComponent {
     fn handle_actions(&mut self, action: Action) -> Option<Action> {
         match action {
             Action::ChangeTab(_) => self.tabs.handle_actions(action),
-            _ => match self.tabs.current_tab {
-                CurrentTab::Subscribed => self.subscribed_page.handle_actions(action),
-                CurrentTab::Local => self.local_page.handle_actions(action),
-                CurrentTab::All => self.all_page.handle_actions(action),
-            },
+            Action::ChangeSort(_) => {
+                self.tabs.handle_actions(action);
+                self.listings.insert(
+                    self.tabs.current_tab,
+                    Listing::new(
+                        self.tabs.current_tab.as_listing_type(),
+                        *self.tabs.sort_hash.get(&self.tabs.current_tab).unwrap(),
+                        Arc::clone(&self.ctx),
+                    )
+                    .unwrap(),
+                );
+
+                Some(Action::Render)
+            }
+            _ => self
+                .listings
+                .get_mut(&self.tabs.current_tab)
+                .unwrap()
+                .handle_actions(action),
         }
     }
 
     fn render(&mut self, f: &mut Frame, rect: Rect) {
         let [tabs_rect, main_rect] =
-            Layout::vertical([Constraint::Length(1), Constraint::Percentage(100)]).areas(rect);
+            Layout::vertical([Constraint::Length(2), Constraint::Percentage(100)]).areas(rect);
 
         let posts_rect = Layout::horizontal([
             Constraint::Percentage(5),
@@ -94,11 +132,10 @@ impl Component for PostsComponent {
         self.top_bar.render(f, tabs_rect);
         self.tabs.render(f, tabs_rect);
 
-        match self.tabs.current_tab {
-            CurrentTab::Subscribed => self.subscribed_page.render(f, posts_rect),
-            CurrentTab::Local => self.local_page.render(f, posts_rect),
-            CurrentTab::All => self.all_page.render(f, posts_rect),
-        }
+        self.listings
+            .get_mut(&self.tabs.current_tab)
+            .unwrap()
+            .render(f, posts_rect);
     }
 }
 

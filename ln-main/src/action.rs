@@ -1,4 +1,5 @@
 use crossterm::event::{KeyCode, KeyEvent};
+use lemmy_api_common::lemmy_db_schema::SortType;
 
 use crate::tui::Event;
 
@@ -13,6 +14,7 @@ pub enum Action {
     SwitchToInputMode,
     SwitchToNormalMode,
     ChangeFocus,
+    ChangeSort(SortType),
     ChangeTab(u8),
     Input(KeyEvent),
 }
@@ -39,15 +41,25 @@ pub fn event_to_action(mode: Mode, event: Event) -> Option<Action> {
 }
 
 fn keycode_to_action(key: KeyEvent) -> Option<Action> {
+    use Action as A;
+
     match key.code {
-        KeyCode::Tab => Some(Action::ChangeFocus),
-        KeyCode::Char('j') | KeyCode::Down => Some(Action::Down),
-        KeyCode::Char('k') | KeyCode::Up => Some(Action::Up),
-        KeyCode::Char('q') => Some(Action::Quit),
-        KeyCode::Char('?') => Some(Action::ShowHelp),
-        KeyCode::Char(n @ '1'..='9') => {
-            Some(Action::ChangeTab(n.to_digit(10).expect("This is ok") as u8))
+        KeyCode::Tab => Some(A::ChangeFocus),
+        KeyCode::Char('j') | KeyCode::Down => Some(A::Down),
+        KeyCode::Char('k') | KeyCode::Up => Some(A::Up),
+        KeyCode::Char('q') => Some(A::Quit),
+        KeyCode::Char('?') => Some(A::ShowHelp),
+        KeyCode::Char(n @ '1'..='3') => {
+            Some(A::ChangeTab(n.to_digit(10).expect("This is ok") as u8))
         }
+        KeyCode::Char(n) => match n {
+            '!' => Some(A::ChangeSort(SortType::Hot)),
+            '@' => Some(A::ChangeSort(SortType::Active)),
+            '#' => Some(A::ChangeSort(SortType::Scaled)),
+            '$' => Some(A::ChangeSort(SortType::Controversial)),
+            '%' => Some(A::ChangeSort(SortType::New)),
+            _ => None,
+        },
         KeyCode::Enter => Some(Action::Confirm),
         _ => None,
     }

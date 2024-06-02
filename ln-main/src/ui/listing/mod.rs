@@ -8,7 +8,7 @@ use std::sync::{
 
 use anyhow::Result;
 use lemmy_api_common::{
-    lemmy_db_schema::ListingType,
+    lemmy_db_schema::{ListingType, SortType},
     post::{GetPosts, GetPostsResponse},
 };
 use ratatui::{prelude::*, widgets::Paragraph};
@@ -19,22 +19,24 @@ use crate::{action::Action, app::Ctx};
 
 pub struct Listing {
     listing_type: ListingType,
-    page_data: Arc<Mutex<Page>>,
-    can_fetch_new_pages: Arc<AtomicBool>,
+    pub sort_type: SortType,
+    pub page_data: Arc<Mutex<Page>>,
+    pub can_fetch_new_pages: Arc<AtomicBool>,
     ctx: Arc<Ctx>,
 }
 
 impl Listing {
-    pub async fn new(listing_type: ListingType, ctx: Arc<Ctx>) -> Result<Self> {
+    pub fn new(listing_type: ListingType, sort_type: SortType, ctx: Arc<Ctx>) -> Result<Self> {
         Ok(Self {
             listing_type,
+            sort_type,
             page_data: Arc::new(Mutex::new(Page::new())),
             can_fetch_new_pages: Arc::new(AtomicBool::new(true)),
             ctx: Arc::clone(&ctx),
         })
     }
 
-    fn try_fetch_new_pages(&self) {
+    pub fn try_fetch_new_pages(&self) {
         if let Ok(true) = self.can_fetch_new_pages.compare_exchange(
             true,
             false,
@@ -44,6 +46,7 @@ impl Listing {
             tokio::task::spawn(Self::fetch_next_page(
                 Arc::clone(&self.page_data),
                 Arc::clone(&self.can_fetch_new_pages),
+                self.sort_type,
                 Arc::clone(&self.ctx),
                 self.listing_type,
             ));
@@ -53,6 +56,7 @@ impl Listing {
     async fn fetch_next_page(
         page_data: Arc<Mutex<Page>>,
         atomic_lock: Arc<AtomicBool>,
+        sort_type: SortType,
         ctx: Arc<Ctx>,
         listing_type: ListingType,
     ) {
@@ -63,7 +67,7 @@ impl Listing {
 
         let posts_req = GetPosts {
             type_: Some(listing_type),
-            sort: Some(lemmy_api_common::lemmy_db_schema::SortType::Hot),
+            sort: Some(sort_type),
             page_cursor: cursor,
             limit: Some(20),
             ..Default::default()
