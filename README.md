@@ -24,8 +24,7 @@ Launch Lemmynator in your terminal to initialize the configuration and make adju
 
 ## Configuration
 
-Lemmynator stores its configuration in a TOML file located at ~/.config/lemmynator/config.toml by default. You can modify this file to
-set the daemon's IP address.
+Lemmynator stores its configuration in a TOML file located at ~/.config/lemmynator/config.toml by default.
 
 ```toml
 [connection]
