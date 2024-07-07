@@ -2,7 +2,9 @@ use std::io::Cursor;
 use std::sync::{Arc, Mutex};
 
 use image::GenericImageView;
+use lemmy_api_common::lemmy_db_schema::newtypes::PostId;
 use lemmy_api_common::lemmy_db_views::structs::PostView;
+use lemmy_api_common::post::CreatePostLike;
 use ratatui::prelude::*;
 use ratatui::widgets::block::{Position, Title};
 use ratatui::widgets::{Block, BorderType, Paragraph, Wrap};
@@ -14,6 +16,7 @@ use crate::app::Ctx;
 use crate::ui::components::Component;
 
 pub struct LemmynatorPost {
+    id: PostId,
     name: String,
     pub body: String,
     pub is_focused: bool,
@@ -22,6 +25,7 @@ pub struct LemmynatorPost {
     author: String,
     community: String,
     counts: LemmynatorCounts,
+    my_vote: Option<i16>,
     is_featured_local: bool,
     is_featured_community: bool,
     ctx: Arc<Ctx>,
@@ -67,6 +71,7 @@ impl LemmynatorPost {
         };
 
         LemmynatorPost {
+            id: lemmy_post.post.id,
             name: lemmy_post.post.name,
             body,
             community: lemmy_post.community.name,
@@ -75,6 +80,7 @@ impl LemmynatorPost {
             is_focused: false,
             image_data: image,
             counts,
+            my_vote: lemmy_post.my_vote,
             is_featured_local: lemmy_post.post.featured_local,
             is_featured_community: lemmy_post.post.featured_community,
             ctx,
@@ -136,11 +142,80 @@ impl LemmynatorPost {
         }
         ctx.action_tx.send(Action::Render).unwrap();
     }
+
+    fn vote(&mut self, mut new_score: i16) {
+        if let Some(current_vote) = self.my_vote {
+            match (current_vote, new_score) {
+                (-1, -1) => {
+                    self.counts.downvotes -= 1;
+                    new_score = 0;
+                }
+                (1, 1) => {
+                    self.counts.upvotes -= 1;
+                    new_score = 0;
+                }
+                (-1, 1) => {
+                    self.counts.downvotes -= 1;
+                    self.counts.upvotes += 1;
+                }
+                (1, -1) => {
+                    self.counts.upvotes -= 1;
+                    self.counts.downvotes += 1;
+                }
+                (0, 1) => {
+                    self.counts.upvotes += 1;
+                }
+                (0, -1) => {
+                    self.counts.downvotes += 1;
+                }
+                _ => unreachable!(),
+            }
+        } else {
+            match new_score {
+                1 => self.counts.upvotes += 1,
+                -1 => self.counts.downvotes += 1,
+                _ => unreachable!(),
+            }
+        }
+
+        self.my_vote = Some(new_score);
+
+        tokio::task::spawn({
+            let ctx = Arc::clone(&self.ctx);
+            let id = self.id.clone();
+            async move {
+                let vote_req = CreatePostLike {
+                    post_id: id,
+                    score: new_score,
+                };
+
+                ctx.client
+                    .post(format!(
+                        "https://{}/api/v3/post/like",
+                        ctx.config.connection.instance
+                    ))
+                    .json(&vote_req)
+                    .send()
+                    .await
+                    .unwrap();
+            }
+        });
+    }
 }
 
 impl Component for LemmynatorPost {
-    fn handle_actions(&mut self, _action: Action) -> Option<Action> {
-        None
+    fn handle_actions(&mut self, action: Action) -> Option<Action> {
+        match action {
+            Action::VoteUp => {
+                self.vote(1);
+                Some(Action::Render)
+            }
+            Action::VoteDown => {
+                self.vote(-1);
+                Some(Action::Render)
+            }
+            _ => None,
+        }
     }
 
     fn render(&mut self, f: &mut Frame, rect: Rect) {
@@ -235,14 +310,31 @@ impl LemmynatorPost {
     }
 
     fn footer(&self) -> Line {
+        let (upvote_span_style, downvote_span_style) = {
+            if let Some(my_vote) = self.my_vote {
+                if my_vote == 1 {
+                    (Style::new().green(), Style::new().white())
+                } else if my_vote == 0 {
+                    (Style::new().white(), Style::new().white())
+                } else {
+                    (Style::new().white(), Style::new().red())
+                }
+            } else {
+                (Style::new().white(), Style::new().white())
+            }
+        };
+
         let mut spans = vec![
             Span::styled(
                 format!(" c/{}   u/{}  ", self.community, self.author),
                 Style::new().white(),
             ),
-            Span::styled(format!("  {} ", self.counts.upvotes), Style::new().green()),
+            Span::styled(format!("  {} ", self.counts.upvotes), upvote_span_style),
             Span::styled(" ", Style::new().white()),
-            Span::styled(format!("  {} ", self.counts.downvotes), Style::new().red()),
+            Span::styled(
+                format!("  {} ", self.counts.downvotes),
+                downvote_span_style,
+            ),
             Span::styled(" ", Style::new().white()),
             Span::styled(
                 format!(" 󰆉 {} ", self.counts.comments),
