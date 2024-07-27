@@ -204,17 +204,17 @@ impl LemmynatorPost {
 }
 
 impl Component for LemmynatorPost {
-    fn handle_actions(&mut self, action: Action) -> Option<Action> {
+    fn handle_actions(&mut self, action: Action) {
         match action {
             Action::VoteUp => {
                 self.vote(1);
-                Some(Action::Render)
+                self.ctx.send_action(Action::Render);
             }
             Action::VoteDown => {
                 self.vote(-1);
-                Some(Action::Render)
+                self.ctx.send_action(Action::Render);
             }
-            _ => None,
+            _ => (),
         }
     }
 

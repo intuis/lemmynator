@@ -1,7 +1,9 @@
+use std::sync::Arc;
+
 use lemmy_api_common::lemmy_db_views::structs::PaginationCursor;
 use ratatui::{prelude::*, widgets::Paragraph};
 
-use crate::{action::Action, ui::components::Component};
+use crate::{action::Action, app::Ctx, ui::components::Component};
 
 use super::lemmynator_post::LemmynatorPost;
 
@@ -11,16 +13,18 @@ pub struct Page {
     pub posts_offset: usize,
     pub currently_focused: u8,
     pub currently_displaying: u8,
+    ctx: Arc<Ctx>,
 }
 
 impl Page {
-    pub fn new() -> Self {
+    pub fn new(ctx: Arc<Ctx>) -> Self {
         Page {
             posts: vec![],
             next_page: None,
             posts_offset: 0,
             currently_focused: 0,
             currently_displaying: 0,
+            ctx,
         }
     }
 
@@ -122,15 +126,15 @@ impl Page {
 }
 
 impl Component for Page {
-    fn handle_actions(&mut self, action: Action) -> Option<Action> {
+    fn handle_actions(&mut self, action: Action) {
         match action {
             Action::Up => {
                 self.scroll_up();
-                Some(Action::Render)
+                self.ctx.send_action(Action::Render);
             }
             Action::Down => {
                 self.scroll_down();
-                Some(Action::Render)
+                self.ctx.send_action(Action::Render);
             }
             _ => self.current_post_mut().handle_actions(action),
         }

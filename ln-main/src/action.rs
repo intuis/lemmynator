@@ -1,7 +1,15 @@
 use crossterm::event::{KeyCode, KeyEvent};
-use lemmy_api_common::lemmy_db_schema::SortType;
+use lemmy_api_common::{
+    lemmy_db_schema::{ListingType, SortType},
+    post::GetPostsResponse,
+};
 
 use crate::tui::Event;
+
+#[derive(Debug, Clone)]
+pub enum UpdateAction {
+    NewPage(ListingType, SortType, GetPostsResponse),
+}
 
 #[derive(Debug, Clone)]
 pub enum Action {

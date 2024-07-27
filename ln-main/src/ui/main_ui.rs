@@ -1,6 +1,9 @@
 use std::{collections::HashMap, sync::Arc};
 
-use crate::{action::Action, app::Ctx};
+use crate::{
+    action::{Action, UpdateAction},
+    app::Ctx,
+};
 
 use super::{
     components::{
@@ -15,37 +18,14 @@ use lemmy_api_common::{lemmy_db_schema::SortType, person::GetUnreadCountResponse
 use ratatui::{prelude::*, widgets::Paragraph};
 
 pub struct MainWindow {
-    posts_viewer: PostsComponent,
-}
-
-impl MainWindow {
-    pub async fn new(ctx: Arc<Ctx>) -> Result<Self> {
-        Ok(Self {
-            posts_viewer: PostsComponent::new(Arc::clone(&ctx)).await?,
-        })
-    }
-}
-
-impl Component for MainWindow {
-    fn handle_actions(&mut self, action: Action) -> Option<Action> {
-        self.posts_viewer.handle_actions(action)
-    }
-
-    fn render(&mut self, f: &mut Frame, _rect: Rect) {
-        self.posts_viewer.render(f, f.size());
-    }
-}
-
-// TODO: make this struct a MainWindow later
-struct PostsComponent {
     tabs: TabComponent,
     top_bar: TopBar,
     listings: HashMap<CurrentTab, Listing>,
     ctx: Arc<Ctx>,
 }
 
-impl PostsComponent {
-    async fn new(ctx: Arc<Ctx>) -> Result<Self> {
+impl MainWindow {
+    pub async fn new(ctx: Arc<Ctx>) -> Result<Self> {
         let unread_counts: GetUnreadCountResponse = ctx
             .client
             .get(format!(
@@ -80,32 +60,46 @@ impl PostsComponent {
             self.listings.insert(tab, listing);
         }
     }
+
+    fn get_current_listing(&mut self) -> &mut Listing {
+        self.listings
+            .get_mut(&self.tabs.current_tab)
+            .expect("Listings already populated")
+    }
+
+    fn change_sort(&mut self, sort_type: SortType) {
+        self.tabs.change_sort(sort_type);
+        let new_listing = Listing::new(
+            self.tabs.current_listing_type(),
+            self.tabs.current_sort(),
+            Arc::clone(&self.ctx),
+        )
+        .unwrap();
+        self.listings
+            .insert(self.tabs.current_tab, new_listing)
+            .unwrap();
+
+        self.ctx.send_action(Action::Render);
+    }
 }
 
-impl Component for PostsComponent {
-    fn handle_actions(&mut self, action: Action) -> Option<Action> {
+impl Component for MainWindow {
+    fn handle_actions(&mut self, action: Action) {
         match action {
             Action::ChangeTab(_) => self.tabs.handle_actions(action),
-            Action::ChangeSort(_) => {
-                self.tabs.handle_actions(action);
+            Action::ChangeSort(sort_type) => self.change_sort(sort_type),
+            _ => self.get_current_listing().handle_actions(action),
+        }
+    }
 
-                let new_listing = Listing::new(
-                    self.tabs.current_listing_type(),
-                    self.tabs.current_sort(),
-                    Arc::clone(&self.ctx),
-                )
-                .unwrap();
+    fn handle_update_action(&mut self, action: UpdateAction) {
+        match &action {
+            UpdateAction::NewPage(listing_type, _, _) => {
                 self.listings
-                    .insert(self.tabs.current_tab, new_listing)
-                    .unwrap();
-
-                Some(Action::Render)
+                    .get_mut(&(*listing_type).into())
+                    .expect("Listing already populated")
+                    .handle_update_action(action);
             }
-            _ => self
-                .listings
-                .get_mut(&self.tabs.current_tab)
-                .expect("Listings already populated")
-                .handle_actions(action),
         }
     }
 
@@ -169,10 +163,6 @@ impl TopBar {
 }
 
 impl Component for TopBar {
-    fn handle_actions(&mut self, _action: Action) -> Option<Action> {
-        None
-    }
-
     fn render(&mut self, f: &mut Frame, rect: Rect) {
         let paragraph = Paragraph::new(self.menu_text()).right_aligned();
         f.render_widget(paragraph, rect);

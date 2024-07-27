@@ -13,6 +13,17 @@ pub enum CurrentTab {
     All,
 }
 
+impl From<ListingType> for CurrentTab {
+    fn from(value: ListingType) -> Self {
+        match value {
+            ListingType::All => Self::All,
+            ListingType::Local => Self::Local,
+            ListingType::Subscribed => Self::Subscribed,
+            ListingType::ModeratorView => unreachable!(),
+        }
+    }
+}
+
 impl CurrentTab {
     pub fn as_listing_type(&self) -> ListingType {
         match self {
@@ -58,6 +69,10 @@ impl TabComponent {
     pub fn current_listing_type(&self) -> ListingType {
         self.current_tab.as_listing_type()
     }
+
+    pub fn change_sort(&mut self, sort_type: SortType) {
+        self.sort_hash.insert(self.current_tab, sort_type);
+    }
 }
 
 fn sort_type_index(sort_type: SortType) -> usize {
@@ -100,7 +115,7 @@ impl Component for TabComponent {
         f.render_widget(sort_type_tabs, sort_type_rect);
     }
 
-    fn handle_actions(&mut self, action: Action) -> Option<Action> {
+    fn handle_actions(&mut self, action: Action) {
         if let Action::ChangeTab(tab) = action {
             match tab {
                 1 => self.current_tab = CurrentTab::Subscribed,
@@ -108,13 +123,7 @@ impl Component for TabComponent {
                 3 => self.current_tab = CurrentTab::All,
                 _ => (),
             };
-            return Some(Action::Render);
+            self.ctx.send_action(Action::Render);
         }
-
-        if let Action::ChangeSort(sort_type) = action {
-            self.sort_hash.insert(self.current_tab, sort_type);
-            return Some(Action::Render);
-        }
-        None
     }
 }

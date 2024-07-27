@@ -3,24 +3,29 @@ mod page;
 
 use std::sync::{
     atomic::{AtomicBool, Ordering},
-    Arc, Mutex,
+    Arc,
 };
 
 use anyhow::Result;
 use lemmy_api_common::{
     lemmy_db_schema::{ListingType, SortType},
+    lemmy_db_views::structs::PaginationCursor,
     post::{GetPosts, GetPostsResponse},
 };
+use lemmynator_post::LemmynatorPost;
 use ratatui::{prelude::*, widgets::Paragraph};
 
-use self::{lemmynator_post::LemmynatorPost, page::Page};
+use self::page::Page;
 use super::{centered_rect, components::Component};
-use crate::{action::Action, app::Ctx};
+use crate::{
+    action::{Action, UpdateAction},
+    app::Ctx,
+};
 
 pub struct Listing {
     listing_type: ListingType,
     pub sort_type: SortType,
-    pub page_data: Arc<Mutex<Page>>,
+    pub page_data: Page,
     pub can_fetch_new_pages: Arc<AtomicBool>,
     ctx: Arc<Ctx>,
 }
@@ -30,7 +35,7 @@ impl Listing {
         Ok(Self {
             listing_type,
             sort_type,
-            page_data: Arc::new(Mutex::new(Page::new())),
+            page_data: Page::new(Arc::clone(&ctx)),
             can_fetch_new_pages: Arc::new(AtomicBool::new(true)),
             ctx: Arc::clone(&ctx),
         })
@@ -44,7 +49,7 @@ impl Listing {
             Ordering::SeqCst,
         ) {
             tokio::task::spawn(Self::fetch_next_page(
-                Arc::clone(&self.page_data),
+                self.page_data.next_page.clone(),
                 Arc::clone(&self.can_fetch_new_pages),
                 self.sort_type,
                 Arc::clone(&self.ctx),
@@ -54,21 +59,16 @@ impl Listing {
     }
 
     async fn fetch_next_page(
-        page_data: Arc<Mutex<Page>>,
+        page_cursor: Option<PaginationCursor>,
         atomic_lock: Arc<AtomicBool>,
         sort_type: SortType,
         ctx: Arc<Ctx>,
         listing_type: ListingType,
     ) {
-        let cursor = {
-            let page_data_lock = &mut *page_data.lock().unwrap();
-            page_data_lock.next_page.clone()
-        };
-
         let posts_req = GetPosts {
             type_: Some(listing_type),
             sort: Some(sort_type),
-            page_cursor: cursor,
+            page_cursor,
             limit: Some(20),
             ..Default::default()
         };
@@ -81,17 +81,9 @@ impl Listing {
             ))
             .query(&posts_req);
 
-        let page: GetPostsResponse = req.send().await.unwrap().json().await.unwrap();
+        let new_page: GetPostsResponse = req.send().await.unwrap().json().await.unwrap();
 
-        let mut new_posts = page
-            .posts
-            .into_iter()
-            .map(|post| LemmynatorPost::from_lemmy_post(post, Arc::clone(&ctx)))
-            .collect();
-
-        let page_data_lock = &mut *page_data.lock().unwrap();
-        page_data_lock.posts.append(&mut new_posts);
-        page_data_lock.next_page = Some(page.next_page.unwrap());
+        ctx.send_update_action(UpdateAction::NewPage(listing_type, sort_type, new_page));
 
         atomic_lock.store(true, Ordering::SeqCst);
         ctx.action_tx.send(Action::Render).unwrap();
@@ -106,8 +98,25 @@ impl Listing {
 }
 
 impl Component for Listing {
-    fn handle_actions(&mut self, action: Action) -> Option<Action> {
-        self.page_data.lock().unwrap().handle_actions(action)
+    fn handle_actions(&mut self, action: Action) {
+        self.page_data.handle_actions(action);
+    }
+
+    fn handle_update_action(&mut self, action: UpdateAction) {
+        match action {
+            UpdateAction::NewPage(_, sort_type, new_page) => {
+                if self.sort_type == sort_type {
+                    let mut new_posts: Vec<LemmynatorPost> = new_page
+                        .posts
+                        .into_iter()
+                        .map(|post| LemmynatorPost::from_lemmy_post(post, self.ctx.clone()))
+                        .collect();
+
+                    self.page_data.posts.append(&mut new_posts);
+                    self.page_data.next_page = new_page.next_page;
+                }
+            }
+        }
     }
 
     fn render(&mut self, f: &mut Frame, rect: Rect) {
@@ -117,17 +126,16 @@ impl Component for Listing {
         let mut are_there_pages_available;
 
         {
-            if !self.page_data.lock().unwrap().posts.is_empty() {
+            if !self.page_data.posts.is_empty() {
                 are_there_pages_available = true;
 
-                let page_data_lock = self.page_data.lock().unwrap();
-                if page_data_lock.posts.len()
-                    < page_data_lock.posts_offset + page_data_lock.currently_displaying as usize
+                if self.page_data.posts.len()
+                    < self.page_data.posts_offset + self.page_data.currently_displaying as usize
                 {
                     self.try_fetch_new_pages();
                     are_there_pages_available = false;
-                } else if page_data_lock.posts.len()
-                    < page_data_lock.posts_offset + page_data_lock.currently_displaying as usize * 2
+                } else if self.page_data.posts.len()
+                    < self.page_data.posts_offset + self.page_data.currently_displaying as usize * 2
                 {
                     self.try_fetch_new_pages();
                 }
@@ -137,15 +145,12 @@ impl Component for Listing {
         }
 
         if are_there_pages_available {
-            self.page_data.lock().unwrap().render(f, posts_rect)
+            self.page_data.render(f, posts_rect)
         } else {
             self.try_fetch_new_pages();
             self.render_loading_screen(f, posts_rect);
         }
 
-        self.page_data
-            .lock()
-            .unwrap()
-            .render_bottom_bar(f, bottom_bar_rect);
+        self.page_data.render_bottom_bar(f, bottom_bar_rect);
     }
 }
