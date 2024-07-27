@@ -24,6 +24,10 @@ impl Page {
         }
     }
 
+    fn current_post_mut(&mut self) -> &mut LemmynatorPost {
+        &mut self.posts[self.posts_offset + self.currently_focused as usize]
+    }
+
     fn scroll_up(&mut self) {
         if self.currently_focused == 0 && self.posts_offset != 0 {
             self.posts_offset -= self.currently_displaying as usize;
@@ -128,7 +132,7 @@ impl Component for Page {
                 self.scroll_down();
                 Some(Action::Render)
             }
-            _ => None,
+            _ => self.current_post_mut().handle_actions(action),
         }
     }
 
@@ -149,9 +153,9 @@ impl Component for Page {
             .map(|rect| rect.height)
             .fold(0, |acc, height| acc + height);
 
-        let space_for_padding_available =
+        let is_space_for_padding_available =
             main_rect.height - size_occupied > self.currently_displaying as u16;
 
-        self.render_posts_in_layout(f, &mut rects, space_for_padding_available);
+        self.render_posts_in_layout(f, &mut rects, is_space_for_padding_available);
     }
 }

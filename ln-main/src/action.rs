@@ -9,6 +9,8 @@ pub enum Action {
     Render,
     Up,
     Down,
+    VoteUp,
+    VoteDown,
     Confirm,
     ShowHelp,
     SwitchToInputMode,
@@ -47,6 +49,8 @@ fn keycode_to_action(key: KeyEvent) -> Option<Action> {
         KeyCode::Tab => Some(A::ChangeFocus),
         KeyCode::Char('j') | KeyCode::Down => Some(A::Down),
         KeyCode::Char('k') | KeyCode::Up => Some(A::Up),
+        KeyCode::Char('J') => Some(A::VoteDown),
+        KeyCode::Char('K') => Some(A::VoteUp),
         KeyCode::Char('q') => Some(A::Quit),
         KeyCode::Char('?') => Some(A::ShowHelp),
         KeyCode::Char(n @ '1'..='3') => {

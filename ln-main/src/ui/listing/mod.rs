@@ -114,29 +114,29 @@ impl Component for Listing {
         let [posts_rect, bottom_bar_rect] =
             Layout::vertical([Constraint::Percentage(100), Constraint::Length(1)]).areas(rect);
 
-        let mut pages_available;
+        let mut are_there_pages_available;
 
         {
             if !self.page_data.lock().unwrap().posts.is_empty() {
-                pages_available = true;
+                are_there_pages_available = true;
 
                 let page_data_lock = self.page_data.lock().unwrap();
                 if page_data_lock.posts.len()
                     < page_data_lock.posts_offset + page_data_lock.currently_displaying as usize
                 {
                     self.try_fetch_new_pages();
-                    pages_available = false;
+                    are_there_pages_available = false;
                 } else if page_data_lock.posts.len()
                     < page_data_lock.posts_offset + page_data_lock.currently_displaying as usize * 2
                 {
                     self.try_fetch_new_pages();
                 }
             } else {
-                pages_available = false;
+                are_there_pages_available = false;
             }
         }
 
-        if pages_available {
+        if are_there_pages_available {
             self.page_data.lock().unwrap().render(f, posts_rect)
         } else {
             self.try_fetch_new_pages();
