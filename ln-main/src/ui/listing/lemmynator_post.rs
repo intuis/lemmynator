@@ -121,7 +121,7 @@ impl LemmynatorPost {
         };
 
         let new_image = if let Some(image) = new_image {
-            let dyn_image_res = image::io::Reader::new(Cursor::new(image))
+            let dyn_image_res = image::ImageReader::new(Cursor::new(image))
                 .with_guessed_format()
                 .unwrap()
                 .decode();
@@ -219,7 +219,7 @@ impl Component for LemmynatorPost {
     }
 
     fn render(&mut self, f: &mut Frame, rect: Rect) {
-        let inner_rect = rect.inner(&Margin::new(1, 1));
+        let inner_rect = rect.inner(Margin::new(1, 1));
 
         let post_block = self.post_block();
         f.render_widget(post_block, rect);

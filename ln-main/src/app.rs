@@ -1,8 +1,8 @@
 use std::sync::{Arc, Mutex};
 
 use lemmy_api_common::{
+    lemmy_db_schema::sensitive::SensitiveString,
     person::{Login, LoginResponse},
-    sensitive::Sensitive,
 };
 use ln_config::Config;
 use ratatui_image::picker::Picker;
@@ -56,8 +56,8 @@ impl App {
         let client = Client::builder().user_agent(user_agent).build()?;
 
         let login_req = Login {
-            username_or_email: Sensitive::new(config.connection.username.clone()),
-            password: Sensitive::new(config.connection.password.clone()),
+            username_or_email: SensitiveString::from(config.connection.username.clone()),
+            password: SensitiveString::from(config.connection.password.clone()),
             ..Default::default()
         };
 
@@ -153,7 +153,7 @@ impl App {
 
     fn render(&mut self, tui: &mut Tui) -> Result<()> {
         tui.terminal.draw(|f| {
-            self.main_window.render(f, f.size());
+            self.main_window.render(f, f.area());
         })?;
         Ok(())
     }
