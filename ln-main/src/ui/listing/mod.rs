@@ -50,7 +50,6 @@ impl Listing {
         ) {
             tokio::task::spawn(Self::fetch_next_page(
                 self.page_data.next_page.clone(),
-                Arc::clone(&self.can_fetch_new_pages),
                 self.sort_type,
                 Arc::clone(&self.ctx),
                 self.listing_type,
@@ -60,7 +59,6 @@ impl Listing {
 
     async fn fetch_next_page(
         page_cursor: Option<PaginationCursor>,
-        atomic_lock: Arc<AtomicBool>,
         sort_type: SortType,
         ctx: Arc<Ctx>,
         listing_type: ListingType,
@@ -85,7 +83,6 @@ impl Listing {
 
         ctx.send_update_action(UpdateAction::NewPage(listing_type, sort_type, new_page));
 
-        atomic_lock.store(true, Ordering::SeqCst);
         ctx.action_tx.send(Action::Render).unwrap();
     }
 
@@ -114,6 +111,7 @@ impl Component for Listing {
 
                     self.page_data.posts.append(&mut new_posts);
                     self.page_data.next_page = new_page.next_page;
+                    self.can_fetch_new_pages.store(true, Ordering::SeqCst);
                 }
             }
         }
