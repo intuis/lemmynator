@@ -82,8 +82,7 @@ impl App {
             .default_headers(header_map)
             .build()?;
 
-        let mut picker = Picker::from_termios().unwrap();
-        picker.guess_protocol();
+        let picker = Picker::from_query_stdio().unwrap();
 
         let ctx = Arc::new(Ctx {
             action_tx,
