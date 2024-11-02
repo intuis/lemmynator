@@ -38,7 +38,7 @@ struct LemmynatorCounts {
 }
 
 struct ImageData {
-    image: Box<dyn StatefulProtocol>,
+    image: StatefulProtocol,
     dimensions: (u32, u32),
 }
 

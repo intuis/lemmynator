@@ -25,6 +25,6 @@ futures = "0.3"
 
 # TUI
 crossterm = { version = "0.28", features = ["event-stream"] }
-ratatui = "0.28"
-ratatui-image = "1.0.5"
+ratatui = "0.29"
+ratatui-image = "3.0.0"
 tui-input = "0.10"
