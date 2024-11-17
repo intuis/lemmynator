@@ -4,11 +4,12 @@ use lemmy_api_common::{
     post::GetPostsResponse,
 };
 
-use crate::tui::Event;
+use crate::{tui::Event, ui::listing::lemmynator_post::LemmynatorPost};
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum UpdateAction {
     NewPage(ListingType, SortType, GetPostsResponse),
+    ViewPost(LemmynatorPost),
 }
 
 #[derive(Debug, Clone)]

@@ -3,7 +3,11 @@ use std::sync::Arc;
 use lemmy_api_common::lemmy_db_views::structs::PaginationCursor;
 use ratatui::{prelude::*, widgets::Paragraph};
 
-use crate::{action::Action, app::Ctx, ui::components::Component};
+use crate::{
+    action::{Action, UpdateAction},
+    app::Ctx,
+    ui::components::Component,
+};
 
 use super::lemmynator_post::LemmynatorPost;
 
@@ -30,6 +34,10 @@ impl Page {
 
     fn current_post_mut(&mut self) -> &mut LemmynatorPost {
         &mut self.posts[self.posts_offset + self.currently_focused as usize]
+    }
+
+    fn current_post(&mut self) -> &LemmynatorPost {
+        &self.posts[self.posts_offset + self.currently_focused as usize]
     }
 
     fn scroll_up(&mut self) {
@@ -116,7 +124,7 @@ impl Page {
     pub fn render_bottom_bar(&mut self, f: &mut Frame, rect: Rect) {
         if self.currently_displaying != 0 {
             let current_page_paragraph = Paragraph::new(format!(
-                "{} / ",
+                "{} / ",
                 (self.posts_offset / self.currently_displaying as usize) + 1,
             ))
             .alignment(Alignment::Center);
@@ -135,6 +143,10 @@ impl Component for Page {
             Action::Down => {
                 self.scroll_down();
                 self.ctx.send_action(Action::Render);
+            }
+            Action::Confirm => {
+                let post = self.current_post().clone();
+                self.ctx.send_update_action(UpdateAction::ViewPost(post));
             }
             _ => self.current_post_mut().handle_actions(action),
         }

@@ -1,5 +1,5 @@
 pub mod components;
-mod listing;
+pub mod listing;
 pub mod main_ui;
 mod top_bar;
 

@@ -10,11 +10,13 @@ use ratatui::widgets::block::{Position, Title};
 use ratatui::widgets::{Block, BorderType, Paragraph, Wrap};
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::StatefulImage;
+use text::ToSpan;
 
 use crate::action::Action;
 use crate::app::Ctx;
 use crate::ui::components::Component;
 
+#[derive(Clone)]
 pub struct LemmynatorPost {
     id: PostId,
     name: String,
@@ -31,6 +33,7 @@ pub struct LemmynatorPost {
     ctx: Arc<Ctx>,
 }
 
+#[derive(Clone)]
 struct LemmynatorCounts {
     upvotes: i64,
     downvotes: i64,
@@ -291,7 +294,11 @@ impl Component for LemmynatorPost {
 impl LemmynatorPost {
     fn post_block(&self) -> Block {
         Block::bordered()
-            .border_type(BorderType::Rounded)
+            .border_type(if self.is_focused {
+                BorderType::Thick
+            } else {
+                BorderType::Rounded
+            })
             .border_style(self.border_style())
             .title(Title::from(self.header()).alignment(Alignment::Left))
             .title(
@@ -306,6 +313,22 @@ impl LemmynatorPost {
             Style::default().fg(self.ctx.config.general.accent_color.as_ratatui())
         } else {
             Style::default()
+        }
+    }
+
+    fn border_separator(&self) -> char {
+        if self.is_focused {
+            '━'
+        } else {
+            '─'
+        }
+    }
+
+    fn border_separator_span(&self) -> Span<'static> {
+        if self.is_focused {
+            '━'.to_span().magenta()
+        } else {
+            '─'.to_span()
         }
     }
 
@@ -325,17 +348,17 @@ impl LemmynatorPost {
         };
 
         let mut spans = vec![
+            Span::styled(format!(" c/{} ", self.community), Style::new().white()),
+            self.border_separator_span(),
+            Span::styled(format!(" u/{} ", self.author), Style::new().white()),
+            self.border_separator_span(),
+            Span::styled(format!("  {} ", self.counts.upvotes), upvote_span_style),
+            self.border_separator_span(),
             Span::styled(
-                format!(" c/{}   u/{}  ", self.community, self.author),
-                Style::new().white(),
-            ),
-            Span::styled(format!("  {} ", self.counts.upvotes), upvote_span_style),
-            Span::styled(" ", Style::new().white()),
-            Span::styled(
-                format!("  {} ", self.counts.downvotes),
+                format!("  {} ", self.counts.downvotes),
                 downvote_span_style,
             ),
-            Span::styled(" ", Style::new().white()),
+            self.border_separator_span(),
             Span::styled(
                 format!(" 󰆉 {} ", self.counts.comments),
                 Style::new().white(),
@@ -343,7 +366,7 @@ impl LemmynatorPost {
         ];
 
         if self.is_focused {
-            spans.push(Span::raw("<"));
+            spans.push(Span::raw(" "));
         }
 
         let line = if self.is_focused {
@@ -361,10 +384,11 @@ impl LemmynatorPost {
         let mut spans = vec![];
 
         if self.is_focused {
-            let highlight_symbol = if self.is_image_only() { "> " } else { ">" };
             spans.push(Span::styled(
-                highlight_symbol,
-                Style::new().fg(self.ctx.config.general.accent_color.as_ratatui()),
+                if self.is_image_only() { " " } else { "" },
+                Style::new()
+                    .fg(self.ctx.config.general.accent_color.as_ratatui())
+                    .bold(),
             ));
         }
 
@@ -403,7 +427,15 @@ impl LemmynatorPost {
                         host
                     }
                 };
-                spans.push(Span::styled(format!(" {} ", host), Style::new().white()))
+                spans.push(Span::styled(
+                    "󰁥  ",
+                    if self.is_focused {
+                        Style::new().magenta()
+                    } else {
+                        Style::new().white()
+                    },
+                ));
+                spans.push(Span::styled(format!("{} ", host), Style::new().white()))
             }
         }
 

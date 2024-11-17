@@ -10,7 +10,7 @@ use super::{
         tabs::{CurrentTab, TabComponent},
         Component,
     },
-    listing::Listing,
+    listing::{lemmynator_post::LemmynatorPost, Listing},
     top_bar::TopBar,
 };
 
@@ -22,6 +22,7 @@ pub struct MainWindow {
     tabs: TabComponent,
     top_bar: TopBar,
     listings: HashMap<CurrentTab, Listing>,
+    currently_viewing: Option<LemmynatorPost>,
     ctx: Arc<Ctx>,
 }
 
@@ -45,6 +46,7 @@ impl MainWindow {
             top_bar: TopBar::new(Arc::clone(&ctx), unread_counts).await,
             listings,
             ctx,
+            currently_viewing: None,
         };
 
         posts_component.populate_listings();
@@ -64,7 +66,7 @@ impl MainWindow {
 
     fn get_current_listing(&mut self) -> &mut Listing {
         self.listings
-            .get_mut(&self.tabs.current_tab)
+            .get_mut(&self.tabs.tabs_state.current())
             .expect("Listings already populated")
     }
 
@@ -77,7 +79,7 @@ impl MainWindow {
         )
         .unwrap();
         self.listings
-            .insert(self.tabs.current_tab, new_listing)
+            .insert(self.tabs.tabs_state.current(), new_listing)
             .unwrap();
 
         self.ctx.send_action(Action::Render);
@@ -94,19 +96,20 @@ impl Component for MainWindow {
     }
 
     fn handle_update_action(&mut self, action: UpdateAction) {
-        match &action {
+        match action {
             UpdateAction::NewPage(listing_type, _, _) => {
                 self.listings
-                    .get_mut(&(*listing_type).into())
+                    .get_mut(&listing_type.into())
                     .expect("Listing already populated")
                     .handle_update_action(action);
             }
+            UpdateAction::ViewPost(post) => self.currently_viewing = Some(post),
         }
     }
 
     fn render(&mut self, f: &mut Frame, rect: Rect) {
         let [tabs_rect, main_rect] =
-            Layout::vertical([Constraint::Length(2), Constraint::Percentage(100)]).areas(rect);
+            Layout::vertical([Constraint::Length(1), Constraint::Percentage(100)]).areas(rect);
 
         let posts_rect = Layout::horizontal([
             Constraint::Percentage(5),
@@ -118,9 +121,13 @@ impl Component for MainWindow {
         self.top_bar.render(f, tabs_rect);
         self.tabs.render(f, tabs_rect);
 
-        self.listings
-            .get_mut(&self.tabs.current_tab)
-            .expect("Listings already populated")
-            .render(f, posts_rect);
+        if let Some(post) = &mut self.currently_viewing {
+            post.render(f, posts_rect)
+        } else {
+            self.listings
+                .get_mut(&self.tabs.tabs_state.current())
+                .expect("Listings already populated")
+                .render(f, posts_rect);
+        }
     }
 }
