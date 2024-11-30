@@ -114,7 +114,7 @@ impl Component for Listing {
                     self.can_fetch_new_pages.store(true, Ordering::SeqCst);
                 }
             }
-            UpdateAction::ViewPost(_) => unreachable!(),
+            _ => unreachable!(),
         }
     }
 

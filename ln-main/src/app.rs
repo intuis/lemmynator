@@ -181,7 +181,7 @@ impl App {
 
     fn handle_action(&mut self, action: Action) {
         match &action {
-            Action::Quit => {
+            Action::ForceQuit => {
                 self.should_quit = true;
             }
 

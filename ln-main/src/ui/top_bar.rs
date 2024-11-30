@@ -14,7 +14,7 @@ use crate::app::Ctx;
 use super::components::Component;
 
 pub struct TopBar {
-    unread_counts: GetUnreadCountResponse,
+    pub unread_counts: GetUnreadCountResponse,
     ctx: Arc<Ctx>,
 }
 
@@ -34,7 +34,7 @@ impl TopBar {
 
         spans.push({
             if total_unreads == 0 {
-                Span::raw(" 󰂚 0")
+                Span::raw(" 󰂚 ")
             } else {
                 Span::styled(
                     format!(" 󱅫 {total_unreads}"),

@@ -1,6 +1,8 @@
 pub mod components;
 pub mod listing;
+mod listing_view;
 pub mod main_ui;
+mod post_view;
 mod top_bar;
 
 use ratatui::prelude::*;

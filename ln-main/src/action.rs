@@ -1,6 +1,8 @@
 use crossterm::event::{KeyCode, KeyEvent};
 use lemmy_api_common::{
-    lemmy_db_schema::{ListingType, SortType},
+    comment::GetCommentsResponse,
+    lemmy_db_schema::{source::comment::Comment, CommentSortType, ListingType, SortType},
+    person::GetUnreadCountResponse,
     post::GetPostsResponse,
 };
 
@@ -10,11 +12,14 @@ use crate::{tui::Event, ui::listing::lemmynator_post::LemmynatorPost};
 pub enum UpdateAction {
     NewPage(ListingType, SortType, GetPostsResponse),
     ViewPost(LemmynatorPost),
+    CommentsForCurrentPost(GetCommentsResponse),
+    UpdateUnreadsCount(GetUnreadCountResponse),
 }
 
 #[derive(Debug, Clone)]
 pub enum Action {
     Quit,
+    ForceQuit,
     Render,
     Up,
     Down,
