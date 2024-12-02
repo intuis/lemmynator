@@ -9,16 +9,12 @@ use crate::{
 };
 
 use super::{
-    components::{
-        tabs::{CurrentTab, TabComponent},
-        Component,
-    },
+    components::{tabs::CurrentTab, Component},
     listing::Listing,
     top_bar::TopBar,
 };
 
 pub struct ListingView {
-    tabs: TabComponent,
     top_bar: TopBar,
     listings: HashMap<CurrentTab, Listing>,
     ctx: Arc<Ctx>,
@@ -45,7 +41,6 @@ impl ListingView {
             _ctx.send_update_action(UpdateAction::UpdateUnreadsCount(unread_counts));
         });
         let mut listing_view = Self {
-            tabs: TabComponent::new(Arc::clone(&ctx)),
             top_bar: TopBar::new(
                 Arc::clone(&ctx),
                 GetUnreadCountResponse {
@@ -76,20 +71,20 @@ impl ListingView {
 
     fn get_current_listing(&mut self) -> &mut Listing {
         self.listings
-            .get_mut(&self.tabs.tabs_state.current())
+            .get_mut(&self.top_bar.tabs.tabs_state.current())
             .expect("Listings already populated")
     }
 
     fn change_sort(&mut self, sort_type: SortType) {
-        self.tabs.change_sort(sort_type);
+        self.top_bar.tabs.change_sort(sort_type);
         let new_listing = Listing::new(
-            self.tabs.current_listing_type(),
-            self.tabs.current_sort(),
+            self.top_bar.tabs.current_listing_type(),
+            self.top_bar.tabs.current_sort(),
             Arc::clone(&self.ctx),
         )
         .unwrap();
         self.listings
-            .insert(self.tabs.tabs_state.current(), new_listing)
+            .insert(self.top_bar.tabs.tabs_state.current(), new_listing)
             .unwrap();
 
         self.ctx.send_action(Action::Render);
@@ -99,7 +94,7 @@ impl ListingView {
 impl Component for ListingView {
     fn handle_actions(&mut self, action: Action) {
         match action {
-            Action::ChangeTab(_) => self.tabs.handle_actions(action),
+            Action::ChangeTab(_) => self.top_bar.tabs.handle_actions(action),
             Action::ChangeSort(sort_type) => self.change_sort(sort_type),
             _ => self.get_current_listing().handle_actions(action),
         }
@@ -133,10 +128,9 @@ impl Component for ListingView {
         .split(main_rect)[1];
 
         self.top_bar.render(f, tabs_rect);
-        self.tabs.render(f, tabs_rect);
 
         self.listings
-            .get_mut(&self.tabs.tabs_state.current())
+            .get_mut(&self.top_bar.tabs.tabs_state.current())
             .expect("Listings already populated")
             .render(f, posts_rect);
     }
