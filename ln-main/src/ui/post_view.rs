@@ -1,5 +1,7 @@
 use ratatui::{
     layout::{Alignment, Constraint, Layout, Margin, Rect},
+    style::{Style, Stylize},
+    text::{Line, Span},
     widgets::{block::Title, Block, Borders, Paragraph},
     Frame,
 };
@@ -43,6 +45,26 @@ impl Component for PostView {
     }
 
     fn render(&mut self, f: &mut Frame, rect: Rect) {
+        let [top_bar, rect] =
+            Layout::vertical([Constraint::Length(1), Constraint::Fill(1)]).areas(rect);
+
+        let spans = vec![
+            Span::raw(" << Press "),
+            Span::styled("q", Style::default().magenta().underlined()),
+            Span::raw(" to go back."),
+        ];
+
+        let how_to_quit = Paragraph::new(Line::from(spans));
+
+        f.render_widget(how_to_quit, top_bar);
+
+        let [_, rect, _] = Layout::horizontal([
+            Constraint::Fill(1),
+            Constraint::Percentage(75),
+            Constraint::Fill(1),
+        ])
+        .areas(rect);
+
         if let Some(image) = &mut *self.post.image_data.lock().unwrap() {
             let desc_lines = {
                 let mut count = 0;

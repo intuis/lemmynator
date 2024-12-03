@@ -11,12 +11,10 @@ use crate::{
 use super::{
     components::{tabs::CurrentTab, Component},
     listing::Listing,
-    top_bar::TopBar,
 };
 
 pub struct ListingView {
-    top_bar: TopBar,
-    listings: HashMap<CurrentTab, Listing>,
+    pub listings: HashMap<CurrentTab, Listing>,
     ctx: Arc<Ctx>,
 }
 
@@ -41,15 +39,6 @@ impl ListingView {
             _ctx.send_update_action(UpdateAction::UpdateUnreadsCount(unread_counts));
         });
         let mut listing_view = Self {
-            top_bar: TopBar::new(
-                Arc::clone(&ctx),
-                GetUnreadCountResponse {
-                    replies: 0,
-                    mentions: 0,
-                    private_messages: 0,
-                },
-            )
-            .await,
             listings: HashMap::new(),
             ctx,
         };
@@ -68,37 +57,10 @@ impl ListingView {
             self.listings.insert(tab, listing);
         }
     }
-
-    fn get_current_listing(&mut self) -> &mut Listing {
-        self.listings
-            .get_mut(&self.top_bar.tabs.tabs_state.current())
-            .expect("Listings already populated")
-    }
-
-    fn change_sort(&mut self, sort_type: SortType) {
-        self.top_bar.tabs.change_sort(sort_type);
-        let new_listing = Listing::new(
-            self.top_bar.tabs.current_listing_type(),
-            self.top_bar.tabs.current_sort(),
-            Arc::clone(&self.ctx),
-        )
-        .unwrap();
-        self.listings
-            .insert(self.top_bar.tabs.tabs_state.current(), new_listing)
-            .unwrap();
-
-        self.ctx.send_action(Action::Render);
-    }
 }
 
 impl Component for ListingView {
-    fn handle_actions(&mut self, action: Action) {
-        match action {
-            Action::ChangeTab(_) => self.top_bar.tabs.handle_actions(action),
-            Action::ChangeSort(sort_type) => self.change_sort(sort_type),
-            _ => self.get_current_listing().handle_actions(action),
-        }
-    }
+    fn handle_actions(&mut self, action: Action) {}
 
     fn handle_update_action(&mut self, action: crate::action::UpdateAction) {
         match action {
@@ -108,30 +70,9 @@ impl Component for ListingView {
                     .expect("Listing already populated")
                     .handle_update_action(action);
             }
-            UpdateAction::UpdateUnreadsCount(unreads_count) => {
-                self.top_bar.unread_counts = unreads_count;
-                self.ctx.send_action(Action::Render);
-            }
             _ => (),
         }
     }
 
-    fn render(&mut self, f: &mut ratatui::Frame, rect: ratatui::prelude::Rect) {
-        let [tabs_rect, main_rect] =
-            Layout::vertical([Constraint::Length(1), Constraint::Percentage(100)]).areas(rect);
-
-        let posts_rect = Layout::horizontal([
-            Constraint::Percentage(5),
-            Constraint::Percentage(90),
-            Constraint::Percentage(5),
-        ])
-        .split(main_rect)[1];
-
-        self.top_bar.render(f, tabs_rect);
-
-        self.listings
-            .get_mut(&self.top_bar.tabs.tabs_state.current())
-            .expect("Listings already populated")
-            .render(f, posts_rect);
-    }
+    fn render(&mut self, f: &mut ratatui::Frame, rect: ratatui::prelude::Rect) {}
 }
