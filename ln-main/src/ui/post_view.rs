@@ -23,6 +23,8 @@ impl PostView {
             zoom_amount: 0,
         }
     }
+
+    fn render_with_image(&mut self, f: &mut Frame, rect: Rect) {}
 }
 
 impl Component for PostView {
@@ -65,20 +67,23 @@ impl Component for PostView {
         ])
         .areas(rect);
 
-        if let Some(image) = &mut *self.post.image_data.lock().unwrap() {
-            let desc_lines = {
-                let mut count = 0;
-                for line in self.post.body.lines() {
-                    if (u16::try_from(line.len()).unwrap() / rect.width) >= 1 {
-                        count += (u16::try_from(line.len()).unwrap() / rect.width) + 1;
-                    } else {
-                        count += 1;
-                    }
-                }
-                count
-            };
+        let mut body_rect: Option<Rect> = None;
+        let mut comments_rect: Option<Rect> = None;
 
-            let [_, image_rect, _, post_rect, _, comments_rect] = Layout::vertical([
+        let desc_lines = {
+            let mut count = 0;
+            for line in self.post.body.lines() {
+                if (u16::try_from(line.len()).unwrap() / rect.width) >= 1 {
+                    count += (u16::try_from(line.len()).unwrap() / rect.width) + 1;
+                } else {
+                    count += 1;
+                }
+            }
+            count
+        };
+
+        if let Some(image) = &mut *self.post.image_data.lock().unwrap() {
+            let [_, image_rect, _, image_body_rect, _, image_comments_rect] = Layout::vertical([
                 Constraint::Length(3),
                 Constraint::Percentage(50 + self.zoom_amount),
                 Constraint::Length(1),
@@ -88,10 +93,12 @@ impl Component for PostView {
             ])
             .areas(rect);
 
+            body_rect = Some(image_body_rect);
+            comments_rect = Some(image_comments_rect);
+
             let image_state = StatefulImage::new(None);
 
             f.render_stateful_widget(image_state, image_rect, &mut image.image);
-            let body_paragraph = self.post.desc_md_paragraph(post_rect);
             f.render_widget(
                 Block::new().borders(Borders::TOP).title_top(format!(
                     "{} {} ",
@@ -103,6 +110,24 @@ impl Component for PostView {
                     vertical: 1,
                 }),
             );
+        } else {
+            let [_, post_body_rect, post_comments_rect] = Layout::vertical([
+                Constraint::Length(3),
+                Constraint::Length(desc_lines + 1),
+                Constraint::Fill(1),
+            ])
+            .areas(rect);
+
+            body_rect = Some(post_body_rect);
+            comments_rect = Some(post_comments_rect);
+        }
+
+        if let Some(body_rect) = body_rect {
+            let body_paragraph = self.post.desc_md_paragraph(body_rect);
+            f.render_widget(body_paragraph, body_rect);
+        }
+
+        if let Some(comments_rect) = comments_rect {
             f.render_widget(
                 Block::new()
                     .borders(Borders::TOP)
@@ -114,7 +139,6 @@ impl Component for PostView {
                     ),
                 comments_rect,
             );
-            f.render_widget(body_paragraph, post_rect);
 
             let comments_rect = comments_rect.inner(Margin {
                 horizontal: 0,
@@ -122,42 +146,50 @@ impl Component for PostView {
             });
 
             if let Some(comments) = &self.post.comments {
-                let mut place_used: u16 = 0;
-                for (idx, comment) in comments.iter().enumerate() {
-                    let place_to_be_consumed = {
-                        let mut count = 0;
-                        for line in comment.comment.content.lines() {
-                            if (line.len() / (comments_rect.width - 2) as usize) > 1 {
-                                count += line.len() / (comments_rect.width - 2) as usize;
-                            } else {
-                                count += 1;
+                if comments.is_empty() {
+                    let no_comments_paragraph =
+                        Paragraph::new("\nNo comments yet! Be the first to share your thoughts.")
+                            .dim()
+                            .centered();
+                    f.render_widget(no_comments_paragraph, comments_rect);
+                } else {
+                    let mut place_used: u16 = 0;
+                    for (idx, comment) in comments.iter().enumerate() {
+                        let place_to_be_consumed = {
+                            let mut count = 0;
+                            for line in comment.comment.content.lines() {
+                                if (line.len() / (comments_rect.width - 2) as usize) > 1 {
+                                    count += line.len() / (comments_rect.width - 2) as usize;
+                                } else {
+                                    count += 1;
+                                }
                             }
+                            count += 2;
+                            count
+                        };
+
+                        let block = Block::bordered().title(comment.creator.name.as_str());
+                        let mut block_rect = comments_rect.inner(Margin {
+                            horizontal: 0,
+                            vertical: place_used,
+                        });
+
+                        place_used += place_to_be_consumed as u16;
+
+                        if place_used >= comments_rect.height {
+                            break;
                         }
-                        count += 2;
-                        count
-                    };
 
-                    let block = Block::bordered().title(comment.creator.name.as_str());
-                    let mut block_rect = comments_rect.inner(Margin {
-                        horizontal: 0,
-                        vertical: place_used,
-                    });
-
-                    place_used += place_to_be_consumed as u16;
-
-                    if place_used >= comments_rect.height {
-                        break;
+                        block_rect.height = place_to_be_consumed as u16;
+                        f.render_widget(block, block_rect);
+                        f.render_widget(
+                            Paragraph::new(comment.comment.content.as_str()),
+                            block_rect.inner(Margin {
+                                horizontal: 1,
+                                vertical: 1,
+                            }),
+                        );
                     }
-
-                    block_rect.height = place_to_be_consumed as u16;
-                    f.render_widget(block, block_rect);
-                    f.render_widget(
-                        Paragraph::new(comment.comment.content.as_str()),
-                        block_rect.inner(Margin {
-                            horizontal: 1,
-                            vertical: 1,
-                        }),
-                    );
                 }
             }
         }
