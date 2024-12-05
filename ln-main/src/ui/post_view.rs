@@ -1,3 +1,5 @@
+use core::panic;
+
 use ratatui::{
     layout::{Alignment, Constraint, Layout, Margin, Rect},
     style::{Style, Stylize},
@@ -154,7 +156,16 @@ impl Component for PostView {
                     f.render_widget(no_comments_paragraph, comments_rect);
                 } else {
                     let mut place_used: u16 = 0;
+                    let mut replies_to_skip = 0;
                     for (idx, comment) in comments.iter().enumerate() {
+                        if replies_to_skip != 0 {
+                            replies_to_skip -= 1;
+                            continue;
+                        }
+                        if comment.counts.child_count != 0 {
+                            replies_to_skip = comment.counts.child_count;
+                        }
+
                         let place_to_be_consumed = {
                             let mut count = 0;
                             for line in comment.comment.content.lines() {
