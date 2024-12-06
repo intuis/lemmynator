@@ -1,19 +1,25 @@
 use crossterm::event::{KeyCode, KeyEvent};
 use lemmy_api_common::{
-    lemmy_db_schema::{ListingType, SortType},
+    comment::GetCommentsResponse,
+    lemmy_db_schema::{source::comment::Comment, CommentSortType, ListingType, SortType},
+    person::GetUnreadCountResponse,
     post::GetPostsResponse,
 };
 
-use crate::tui::Event;
+use crate::{tui::Event, ui::listing::lemmynator_post::LemmynatorPost};
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum UpdateAction {
     NewPage(ListingType, SortType, GetPostsResponse),
+    ViewPost(LemmynatorPost),
+    CommentsForCurrentPost(GetCommentsResponse),
+    UpdateUnreadsCount(GetUnreadCountResponse),
 }
 
 #[derive(Debug, Clone)]
 pub enum Action {
     Quit,
+    ForceQuit,
     Render,
     Up,
     Down,
@@ -24,7 +30,7 @@ pub enum Action {
     SwitchToInputMode,
     SwitchToNormalMode,
     ChangeFocus,
-    ChangeSort(SortType),
+    ChangeSort,
     ChangeTab(u8),
     Input(KeyEvent),
 }
@@ -64,14 +70,7 @@ fn keycode_to_action(key: KeyEvent) -> Option<Action> {
         KeyCode::Char(n @ '1'..='3') => {
             Some(A::ChangeTab(n.to_digit(10).expect("This is ok") as u8))
         }
-        KeyCode::Char(n) => match n {
-            '!' => Some(A::ChangeSort(SortType::Hot)),
-            '@' => Some(A::ChangeSort(SortType::Active)),
-            '#' => Some(A::ChangeSort(SortType::Scaled)),
-            '$' => Some(A::ChangeSort(SortType::Controversial)),
-            '%' => Some(A::ChangeSort(SortType::New)),
-            _ => None,
-        },
+        KeyCode::Char('4') => Some(A::ChangeSort),
         KeyCode::Enter => Some(Action::Confirm),
         _ => None,
     }

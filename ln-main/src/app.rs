@@ -1,4 +1,8 @@
-use std::sync::{Arc, Mutex};
+use std::{
+    fs::File,
+    io::{Read, Write},
+    sync::{Arc, Mutex},
+};
 
 use lemmy_api_common::{
     lemmy_db_schema::sensitive::SensitiveString,
@@ -61,21 +65,39 @@ impl App {
             ..Default::default()
         };
 
-        let res: LoginResponse = client
-            .post(format!(
-                "https://{}/api/v3/user/login",
-                config.connection.instance
-            ))
-            .json(&login_req)
-            .send()
-            .await?
-            .json()
-            .await?;
+        let xdg_dirs = Config::get_xdg_dirs();
+        let jwt_file = xdg_dirs.get_cache_file("jwt");
+
+        let jwt = if jwt_file.exists() {
+            let mut buf = String::new();
+            File::open(jwt_file)
+                .unwrap()
+                .read_to_string(&mut buf)
+                .unwrap();
+            buf
+        } else {
+            let res: LoginResponse = client
+                .post(format!(
+                    "https://{}/api/v3/user/login",
+                    config.connection.instance
+                ))
+                .json(&login_req)
+                .send()
+                .await?
+                .json()
+                .await?;
+            let jwt = res.jwt.unwrap().to_string();
+            File::create(xdg_dirs.place_cache_file("jwt").unwrap())
+                .unwrap()
+                .write(jwt.as_bytes())
+                .unwrap();
+            jwt
+        };
 
         let mut header_map = HeaderMap::new();
         header_map.insert(
             reqwest::header::AUTHORIZATION,
-            HeaderValue::from_str(&format!("Bearer {}", &res.jwt.as_ref().unwrap()[..]))?,
+            HeaderValue::from_str(&format!("Bearer {}", jwt))?,
         );
         let client = Client::builder()
             .user_agent(user_agent)
@@ -159,7 +181,7 @@ impl App {
 
     fn handle_action(&mut self, action: Action) {
         match &action {
-            Action::Quit => {
+            Action::ForceQuit => {
                 self.should_quit = true;
             }
 

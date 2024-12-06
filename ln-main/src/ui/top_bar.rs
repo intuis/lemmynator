@@ -11,16 +11,21 @@ use ratatui::{
 
 use crate::app::Ctx;
 
-use super::components::Component;
+use super::components::{tabs::TabComponent, Component};
 
 pub struct TopBar {
-    unread_counts: GetUnreadCountResponse,
+    pub tabs: TabComponent,
+    pub unread_counts: GetUnreadCountResponse,
     ctx: Arc<Ctx>,
 }
 
 impl TopBar {
     pub async fn new(ctx: Arc<Ctx>, unread_counts: GetUnreadCountResponse) -> Self {
-        Self { ctx, unread_counts }
+        Self {
+            tabs: TabComponent::new(Arc::clone(&ctx)),
+            unread_counts,
+            ctx,
+        }
     }
 
     fn total_unreads(&self) -> i64 {
@@ -34,7 +39,7 @@ impl TopBar {
 
         spans.push({
             if total_unreads == 0 {
-                Span::raw(" 󰂚 0")
+                Span::raw(" 󰂚 ")
             } else {
                 Span::styled(
                     format!(" 󱅫 {total_unreads}"),
@@ -59,5 +64,7 @@ impl Component for TopBar {
         let paragraph =
             Paragraph::new(format!(" {}", &*self.ctx.config.connection.instance)).left_aligned();
         f.render_widget(paragraph, rect);
+
+        self.tabs.render(f, rect);
     }
 }

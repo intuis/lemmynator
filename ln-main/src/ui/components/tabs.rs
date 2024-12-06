@@ -1,10 +1,11 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, fmt::Display, sync::Arc};
 
 use crate::{action::Action, app::Ctx};
 
 use super::Component;
+use intui_tabs::{Tabs, TabsState};
 use lemmy_api_common::lemmy_db_schema::{ListingType, SortType};
-use ratatui::{layout::Flex, prelude::*, widgets::Tabs};
+use ratatui::{layout::Flex, prelude::*, widgets::Paragraph};
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum CurrentTab {
@@ -34,18 +35,32 @@ impl CurrentTab {
     }
 }
 
+impl Default for CurrentTab {
+    fn default() -> Self {
+        CurrentTab::Local
+    }
+}
+
+impl Display for CurrentTab {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CurrentTab::Subscribed => write!(f, "Subscribed"),
+            CurrentTab::Local => write!(f, "Local"),
+            CurrentTab::All => write!(f, "All"),
+        }
+    }
+}
+
 pub struct TabComponent {
-    tabs_listing_type: [&'static str; 3],
     tabs_sort: [&'static str; 5],
-    pub current_tab: CurrentTab,
-    pub sort_hash: HashMap<CurrentTab, SortType>,
+    pub tabs_state: TabsState<CurrentTab>,
+    pub current_sort: SortType,
     ctx: Arc<Ctx>,
 }
 
 impl TabComponent {
     pub fn new(ctx: Arc<Ctx>) -> Self {
         Self {
-            tabs_listing_type: ["1. Subscribed", "2. Local", "3. All"],
             tabs_sort: [
                 "!. Hot",
                 "@. Active",
@@ -53,25 +68,32 @@ impl TabComponent {
                 "$. Controversial",
                 "%. New",
             ],
-            current_tab: CurrentTab::Local,
-            sort_hash: HashMap::new(),
+            current_sort: SortType::Hot,
             ctx,
+            tabs_state: TabsState::new(vec![
+                CurrentTab::Subscribed,
+                CurrentTab::Local,
+                CurrentTab::All,
+            ]),
         }
     }
 
     pub fn current_sort(&self) -> SortType {
-        *self
-            .sort_hash
-            .get(&self.current_tab)
-            .unwrap_or(&SortType::Hot)
+        self.current_sort
     }
 
     pub fn current_listing_type(&self) -> ListingType {
-        self.current_tab.as_listing_type()
+        self.tabs_state.current().as_listing_type()
     }
 
-    pub fn change_sort(&mut self, sort_type: SortType) {
-        self.sort_hash.insert(self.current_tab, sort_type);
+    pub fn change_sort(&mut self) {
+        match self.current_sort {
+            SortType::Hot => self.current_sort = SortType::Active,
+            SortType::Active => self.current_sort = SortType::Scaled,
+            SortType::Scaled => self.current_sort = SortType::Controversial,
+            SortType::New => self.current_sort = SortType::Hot,
+            _ => unreachable!(),
+        }
     }
 }
 
@@ -88,39 +110,57 @@ fn sort_type_index(sort_type: SortType) -> usize {
 
 impl Component for TabComponent {
     fn render(&mut self, f: &mut Frame, rect: Rect) {
-        let [listing_type_rect, sort_type_rect] =
-            Layout::vertical([Constraint::Length(1), Constraint::Length(1)]).areas(rect);
+        let [top_bar] = Layout::vertical([Constraint::Length(1)]).areas(rect);
 
-        let listing_type_rect = Layout::horizontal([Constraint::Length(34)])
-            .flex(Flex::Center)
-            .split(listing_type_rect)[0];
+        let sort_string = format!(" {}  ", self.current_sort().to_string());
 
-        let listing_type_tabs = Tabs::new(self.tabs_listing_type)
-            .style(Style::default().white())
-            .highlight_style(Style::default().fg(self.ctx.config.general.accent_color.as_ratatui()))
-            .select(self.current_tab as usize)
-            .divider(symbols::DOT);
+        let [listing_type_rect, separator_rect, sort_type_rect] = Layout::horizontal([
+            Constraint::Length(34),
+            Constraint::Length(3),
+            Constraint::Length((sort_string.len()) as u16 + 2),
+        ])
+        .flex(Flex::Center)
+        .areas(top_bar);
 
-        let sort_type_rect = Layout::horizontal([Constraint::Length(59)])
-            .flex(Flex::Center)
-            .split(sort_type_rect)[0];
+        // let listing_type_tabs = Tabs::new(self.tabs_listing_type)
+        //     .style(Style::default().white())
+        //     .highlight_style(Style::default().fg(self.ctx.config.general.accent_color.as_ratatui()))
+        //     .select(self.current_tab as usize)
+        //     .divider(symbols::DOT);
+        let listing_type_tabs = Tabs::new().color(Color::Magenta);
+        // .style(Style::default().white())
+        // .highlight_style(Style::default().fg(self.ctx.config.general.accent_color.as_ratatui()))
+        // .select(self.current_tab as usize)
+        // .divider(symbols::DOT);
 
-        let sort_type_tabs = Tabs::new(self.tabs_sort)
-            .style(Style::default().white())
-            .highlight_style(Style::default().fg(Color::Yellow))
-            .select(sort_type_index(self.current_sort()))
-            .divider(symbols::DOT);
+        let separator_paragraph = Paragraph::new(" ⎥ ").bold();
 
-        f.render_widget(listing_type_tabs, listing_type_rect);
-        f.render_widget(sort_type_tabs, sort_type_rect);
+        let spans = vec![Line::from(vec![
+            Span::from(" "),
+            Span::styled(
+                "4",
+                Style::default()
+                    .underlined()
+                    .underline_color(Color::Magenta),
+            ),
+            Span::from("."),
+            Span::from(sort_string),
+            Span::from(""),
+        ])];
+
+        let current_sort_paragraph = Paragraph::new(spans).bg(Color::DarkGray);
+
+        f.render_stateful_widget(listing_type_tabs, listing_type_rect, &mut self.tabs_state);
+        f.render_widget(separator_paragraph, separator_rect);
+        f.render_widget(current_sort_paragraph, sort_type_rect);
     }
 
     fn handle_actions(&mut self, action: Action) {
         if let Action::ChangeTab(tab) = action {
             match tab {
-                1 => self.current_tab = CurrentTab::Subscribed,
-                2 => self.current_tab = CurrentTab::Local,
-                3 => self.current_tab = CurrentTab::All,
+                1 => self.tabs_state.set(1),
+                2 => self.tabs_state.set(2),
+                3 => self.tabs_state.set(3),
                 _ => (),
             };
             self.ctx.send_action(Action::Render);

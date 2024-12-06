@@ -1,45 +1,52 @@
+use std::borrow::Borrow;
 use std::io::Cursor;
 use std::sync::{Arc, Mutex};
 
 use image::GenericImageView;
-use lemmy_api_common::lemmy_db_schema::newtypes::PostId;
-use lemmy_api_common::lemmy_db_views::structs::PostView;
+use lemmy_api_common::lemmy_db_schema::newtypes::{CommunityId, PostId};
+use lemmy_api_common::lemmy_db_views::structs::{CommentView, PostView};
 use lemmy_api_common::post::CreatePostLike;
 use ratatui::prelude::*;
 use ratatui::widgets::block::{Position, Title};
-use ratatui::widgets::{Block, BorderType, Paragraph, Wrap};
+use ratatui::widgets::{Block, BorderType, Borders, Paragraph, Wrap};
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::StatefulImage;
+use text::ToSpan;
+use tui_scrollview::ScrollView;
 
 use crate::action::Action;
 use crate::app::Ctx;
 use crate::ui::components::Component;
 
+#[derive(Clone)]
 pub struct LemmynatorPost {
-    id: PostId,
-    name: String,
+    pub id: PostId,
+    pub community_id: CommunityId,
+    pub name: String,
     pub body: String,
     pub is_focused: bool,
-    image_data: Arc<Mutex<Option<ImageData>>>,
+    pub image_data: Arc<Mutex<Option<ImageData>>>,
     embed_url: Option<url::Url>,
-    author: String,
-    community: String,
-    counts: LemmynatorCounts,
-    my_vote: Option<i16>,
+    pub author: String,
+    pub community: String,
+    pub counts: LemmynatorCounts,
+    pub my_vote: Option<i16>,
     is_featured_local: bool,
     is_featured_community: bool,
-    ctx: Arc<Ctx>,
+    pub comments: Option<Vec<CommentView>>,
+    pub ctx: Arc<Ctx>,
 }
 
+#[derive(Clone)]
 struct LemmynatorCounts {
     upvotes: i64,
     downvotes: i64,
     comments: i64,
 }
 
-struct ImageData {
-    image: StatefulProtocol,
-    dimensions: (u32, u32),
+pub struct ImageData {
+    pub image: StatefulProtocol,
+    pub dimensions: (u32, u32),
 }
 
 impl LemmynatorPost {
@@ -67,7 +74,7 @@ impl LemmynatorPost {
         let counts = LemmynatorCounts {
             upvotes: lemmy_post.counts.upvotes,
             downvotes: lemmy_post.counts.downvotes,
-            comments: lemmy_post.counts.downvotes,
+            comments: lemmy_post.counts.comments,
         };
 
         LemmynatorPost {
@@ -75,6 +82,7 @@ impl LemmynatorPost {
             name: lemmy_post.post.name,
             body,
             community: lemmy_post.community.name,
+            community_id: lemmy_post.community.id,
             author: lemmy_post.creator.name,
             embed_url,
             is_focused: false,
@@ -84,6 +92,7 @@ impl LemmynatorPost {
             is_featured_local: lemmy_post.post.featured_local,
             is_featured_community: lemmy_post.post.featured_community,
             ctx,
+            comments: None,
         }
     }
 
@@ -201,6 +210,33 @@ impl LemmynatorPost {
             }
         });
     }
+
+    pub fn desc_md_paragraph(&self, text_rect: Rect) -> Paragraph<'_> {
+        let mut md_header_encountered = false;
+        let body: Vec<_> = self
+            .body
+            .lines()
+            .flat_map(|line| {
+                if line.starts_with('#') {
+                    md_header_encountered = true;
+                    let trimmed_line = line[0..].trim_start_matches('#').trim_start();
+                    vec![Line::styled(trimmed_line, Style::new().bold())]
+                } else if md_header_encountered {
+                    let max_width = text_rect.width - 2;
+                    Self::wrap_line(line, max_width)
+                } else {
+                    vec![Line::from(
+                        Self::parse_markdown_url(line)
+                            .into_iter()
+                            .map(|markdown| Span::from(markdown))
+                            .collect::<Vec<_>>(),
+                    )]
+                }
+            })
+            .collect();
+        let body_paragraph = Paragraph::new(body).wrap(Wrap { trim: false });
+        body_paragraph
+    }
 }
 
 impl Component for LemmynatorPost {
@@ -225,7 +261,7 @@ impl Component for LemmynatorPost {
         f.render_widget(post_block, rect);
 
         if !self.is_image_only() {
-            let [_, image_rect, _, mut text_rect] = Layout::horizontal([
+            let [_, image_rect, _, mut desc_rect] = Layout::horizontal([
                 Constraint::Length(1),
                 Constraint::Length(20),
                 Constraint::Length(1),
@@ -237,33 +273,11 @@ impl Component for LemmynatorPost {
                 let image_widget = StatefulImage::new(None);
                 f.render_stateful_widget(image_widget, image_rect, &mut image.image);
             } else {
-                text_rect = inner_rect;
+                desc_rect = inner_rect;
             }
 
-            let mut md_header_encountered = false;
-            let body: Vec<_> = self
-                .body
-                .lines()
-                .flat_map(|line| {
-                    if line.starts_with('#') {
-                        md_header_encountered = true;
-                        let trimmed_line = line[0..].trim_start_matches('#').trim_start();
-                        vec![Line::styled(trimmed_line, Style::new().bold())]
-                    } else if md_header_encountered {
-                        let max_width = text_rect.width - 2;
-                        Self::wrap_line(line, max_width)
-                    } else {
-                        vec![Line::from(
-                            Self::parse_markdown_url(line)
-                                .into_iter()
-                                .map(|markdown| Span::from(markdown))
-                                .collect::<Vec<_>>(),
-                        )]
-                    }
-                })
-                .collect();
-            let body_paragraph = Paragraph::new(body).wrap(Wrap { trim: false });
-            f.render_widget(body_paragraph, text_rect);
+            let body_paragraph = self.desc_md_paragraph(desc_rect);
+            f.render_widget(body_paragraph, desc_rect);
         } else {
             let left_padding_percentage = {
                 let (width, height) = self.image_data.lock().unwrap().as_ref().unwrap().dimensions;
@@ -291,7 +305,11 @@ impl Component for LemmynatorPost {
 impl LemmynatorPost {
     fn post_block(&self) -> Block {
         Block::bordered()
-            .border_type(BorderType::Rounded)
+            .border_type(if self.is_focused {
+                BorderType::Thick
+            } else {
+                BorderType::Rounded
+            })
             .border_style(self.border_style())
             .title(Title::from(self.header()).alignment(Alignment::Left))
             .title(
@@ -309,7 +327,23 @@ impl LemmynatorPost {
         }
     }
 
-    fn footer(&self) -> Line {
+    pub fn border_separator(&self) -> char {
+        if self.is_focused {
+            '━'
+        } else {
+            '─'
+        }
+    }
+
+    fn border_separator_span(&self) -> Span<'static> {
+        if self.is_focused {
+            '━'.to_span().magenta()
+        } else {
+            '─'.to_span()
+        }
+    }
+
+    pub fn footer(&self) -> Line {
         let (upvote_span_style, downvote_span_style) = {
             if let Some(my_vote) = self.my_vote {
                 if my_vote == 1 {
@@ -325,17 +359,17 @@ impl LemmynatorPost {
         };
 
         let mut spans = vec![
+            Span::styled(format!(" c/{} ", self.community), Style::new().white()),
+            self.border_separator_span(),
+            Span::styled(format!(" u/{} ", self.author), Style::new().white()),
+            self.border_separator_span(),
+            Span::styled(format!("  {} ", self.counts.upvotes), upvote_span_style),
+            self.border_separator_span(),
             Span::styled(
-                format!(" c/{}   u/{}  ", self.community, self.author),
-                Style::new().white(),
-            ),
-            Span::styled(format!("  {} ", self.counts.upvotes), upvote_span_style),
-            Span::styled(" ", Style::new().white()),
-            Span::styled(
-                format!("  {} ", self.counts.downvotes),
+                format!("  {} ", self.counts.downvotes),
                 downvote_span_style,
             ),
-            Span::styled(" ", Style::new().white()),
+            self.border_separator_span(),
             Span::styled(
                 format!(" 󰆉 {} ", self.counts.comments),
                 Style::new().white(),
@@ -343,7 +377,7 @@ impl LemmynatorPost {
         ];
 
         if self.is_focused {
-            spans.push(Span::raw("<"));
+            spans.push(Span::raw(" "));
         }
 
         let line = if self.is_focused {
@@ -361,10 +395,11 @@ impl LemmynatorPost {
         let mut spans = vec![];
 
         if self.is_focused {
-            let highlight_symbol = if self.is_image_only() { "> " } else { ">" };
             spans.push(Span::styled(
-                highlight_symbol,
-                Style::new().fg(self.ctx.config.general.accent_color.as_ratatui()),
+                if self.is_image_only() { " " } else { "" },
+                Style::new()
+                    .fg(self.ctx.config.general.accent_color.as_ratatui())
+                    .bold(),
             ));
         }
 
@@ -403,7 +438,15 @@ impl LemmynatorPost {
                         host
                     }
                 };
-                spans.push(Span::styled(format!(" {} ", host), Style::new().white()))
+                spans.push(Span::styled(
+                    "󰁥  ",
+                    if self.is_focused {
+                        Style::new().magenta()
+                    } else {
+                        Style::new().white()
+                    },
+                ));
+                spans.push(Span::styled(format!("{} ", host), Style::new().white()))
             }
         }
 

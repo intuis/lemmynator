@@ -133,11 +133,11 @@ impl Config {
         Ok(toml::from_str(DEFAULT_CONFIG)?)
     }
 
-    fn get_xdg_dirs() -> &'static BaseDirectories {
+    pub fn get_xdg_dirs() -> &'static BaseDirectories {
         XDG_DIRS.get_or_init(|| xdg::BaseDirectories::with_prefix("lemmynator").unwrap())
     }
 
-    fn get_config_path() -> &'static PathBuf {
+    pub fn get_config_path() -> &'static PathBuf {
         CONFIG_PATH.get_or_init(|| {
             Self::get_xdg_dirs()
                 .place_config_file("config.toml")
