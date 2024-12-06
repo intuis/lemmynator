@@ -50,8 +50,8 @@ impl MainWindow {
             .expect("Listings already populated")
     }
 
-    fn change_sort(&mut self, sort_type: SortType) {
-        self.top_bar.tabs.change_sort(sort_type);
+    fn change_sort(&mut self) {
+        self.top_bar.tabs.change_sort();
         let new_listing = Listing::new(
             self.top_bar.tabs.current_listing_type(),
             self.top_bar.tabs.current_sort(),
@@ -81,7 +81,7 @@ impl Component for MainWindow {
                     post_view.handle_actions(action);
                 }
             }
-            Action::ChangeSort(sort_type) => self.change_sort(sort_type),
+            Action::ChangeSort => self.change_sort(),
             Action::Quit => {
                 self.ctx.send_action(Action::ForceQuit);
             }

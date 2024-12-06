@@ -30,7 +30,7 @@ pub enum Action {
     SwitchToInputMode,
     SwitchToNormalMode,
     ChangeFocus,
-    ChangeSort(SortType),
+    ChangeSort,
     ChangeTab(u8),
     Input(KeyEvent),
 }
@@ -70,14 +70,7 @@ fn keycode_to_action(key: KeyEvent) -> Option<Action> {
         KeyCode::Char(n @ '1'..='3') => {
             Some(A::ChangeTab(n.to_digit(10).expect("This is ok") as u8))
         }
-        KeyCode::Char(n) => match n {
-            '!' => Some(A::ChangeSort(SortType::Hot)),
-            '@' => Some(A::ChangeSort(SortType::Active)),
-            '#' => Some(A::ChangeSort(SortType::Scaled)),
-            '$' => Some(A::ChangeSort(SortType::Controversial)),
-            '%' => Some(A::ChangeSort(SortType::New)),
-            _ => None,
-        },
+        KeyCode::Char('4') => Some(A::ChangeSort),
         KeyCode::Enter => Some(Action::Confirm),
         _ => None,
     }

@@ -54,7 +54,7 @@ impl Display for CurrentTab {
 pub struct TabComponent {
     tabs_sort: [&'static str; 5],
     pub tabs_state: TabsState<CurrentTab>,
-    pub sort_hash: HashMap<CurrentTab, SortType>,
+    pub current_sort: SortType,
     ctx: Arc<Ctx>,
 }
 
@@ -68,7 +68,7 @@ impl TabComponent {
                 "$. Controversial",
                 "%. New",
             ],
-            sort_hash: HashMap::new(),
+            current_sort: SortType::Hot,
             ctx,
             tabs_state: TabsState::new(vec![
                 CurrentTab::Subscribed,
@@ -79,18 +79,21 @@ impl TabComponent {
     }
 
     pub fn current_sort(&self) -> SortType {
-        *self
-            .sort_hash
-            .get(&self.tabs_state.current())
-            .unwrap_or(&SortType::Hot)
+        self.current_sort
     }
 
     pub fn current_listing_type(&self) -> ListingType {
         self.tabs_state.current().as_listing_type()
     }
 
-    pub fn change_sort(&mut self, sort_type: SortType) {
-        self.sort_hash.insert(self.tabs_state.current(), sort_type);
+    pub fn change_sort(&mut self) {
+        match self.current_sort {
+            SortType::Hot => self.current_sort = SortType::Active,
+            SortType::Active => self.current_sort = SortType::Scaled,
+            SortType::Scaled => self.current_sort = SortType::Controversial,
+            SortType::New => self.current_sort = SortType::Hot,
+            _ => unreachable!(),
+        }
     }
 }
 
