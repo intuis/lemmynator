@@ -321,7 +321,7 @@ impl LemmynatorPost {
 
     fn border_style(&self) -> Style {
         if self.is_focused {
-            Style::default().fg(self.ctx.config.general.accent_color.as_ratatui())
+            Style::default().fg(self.ctx.config.general.accent_color)
         } else {
             Style::default()
         }
@@ -397,9 +397,7 @@ impl LemmynatorPost {
         if self.is_focused {
             spans.push(Span::styled(
                 if self.is_image_only() { " " } else { "" },
-                Style::new()
-                    .fg(self.ctx.config.general.accent_color.as_ratatui())
-                    .bold(),
+                Style::new().fg(self.ctx.config.general.accent_color).bold(),
             ));
         }
 

@@ -6,6 +6,7 @@ use std::{
 };
 
 use anyhow::{bail, Context, Result};
+use ratatui::style::Color;
 use serde::{Deserialize, Serialize};
 use toml::Table;
 use xdg::BaseDirectories;
@@ -33,50 +34,6 @@ pub struct Connection {
 const DEFAULT_CONFIG: &str = include_str!("../defaults/config.toml");
 static XDG_DIRS: OnceLock<BaseDirectories> = OnceLock::new();
 static CONFIG_PATH: OnceLock<PathBuf> = OnceLock::new();
-
-#[derive(Debug, Serialize, Deserialize)]
-pub enum Color {
-    Red,
-    Green,
-    Blue,
-    Yellow,
-    Magenta,
-    Cyan,
-    LightRed,
-    LightGreen,
-    LightYellow,
-    LightBlue,
-    LightMagenta,
-    LightCyan,
-}
-
-impl Color {
-    #[must_use]
-    pub const fn as_ratatui(&self) -> ratatui::style::Color {
-        use ratatui::style::Color as RColor;
-        use Color::*;
-        match self {
-            Red => RColor::Red,
-            Green => RColor::Green,
-            Blue => RColor::Blue,
-            Yellow => RColor::Yellow,
-            Magenta => RColor::Magenta,
-            Cyan => RColor::Cyan,
-            LightRed => RColor::LightRed,
-            LightGreen => RColor::LightGreen,
-            LightYellow => RColor::LightYellow,
-            LightBlue => RColor::LightBlue,
-            LightMagenta => RColor::LightMagenta,
-            LightCyan => RColor::LightCyan,
-        }
-    }
-}
-
-impl Default for Color {
-    fn default() -> Self {
-        Self::LightMagenta
-    }
-}
 
 impl Config {
     pub fn init() -> Result<Self> {

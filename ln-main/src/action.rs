@@ -1,7 +1,7 @@
 use crossterm::event::{KeyCode, KeyEvent};
 use lemmy_api_common::{
     comment::GetCommentsResponse,
-    lemmy_db_schema::{source::comment::Comment, CommentSortType, ListingType, SortType},
+    lemmy_db_schema::{ListingType, SortType},
     person::GetUnreadCountResponse,
     post::GetPostsResponse,
 };
@@ -32,6 +32,7 @@ pub enum Action {
     ChangeFocus,
     ChangeSort,
     ChangeTab(u8),
+    ChangeSubTab(char),
     Input(KeyEvent),
 }
 
@@ -70,6 +71,7 @@ fn keycode_to_action(key: KeyEvent) -> Option<Action> {
         KeyCode::Char(n @ '1'..='3') => {
             Some(A::ChangeTab(n.to_digit(10).expect("This is ok") as u8))
         }
+        KeyCode::Char('!') => Some(A::ChangeSubTab('!')),
         KeyCode::Char('4') => Some(A::ChangeSort),
         KeyCode::Enter => Some(Action::Confirm),
         _ => None,
