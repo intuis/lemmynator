@@ -337,7 +337,7 @@ impl LemmynatorPost {
 
     fn border_separator_span(&self) -> Span<'static> {
         if self.is_focused {
-            '━'.to_span().magenta()
+            '━'.to_span().fg(self.ctx.config.general.accent_color)
         } else {
             '─'.to_span()
         }
@@ -439,7 +439,7 @@ impl LemmynatorPost {
                 spans.push(Span::styled(
                     "󰁥  ",
                     if self.is_focused {
-                        Style::new().magenta()
+                        Style::new().fg(self.ctx.config.general.accent_color)
                     } else {
                         Style::new().white()
                     },

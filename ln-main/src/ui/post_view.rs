@@ -78,10 +78,11 @@ impl Component for PostView {
     }
 
     fn render(&mut self, f: &mut Frame, rect: Rect) {
-        let [sub_tab, top_bar, rect] = Layout::vertical([
+        let [sub_tab, _, rect, keybinds_bar] = Layout::vertical([
             Constraint::Length(1),
             Constraint::Length(1),
             Constraint::Fill(1),
+            Constraint::Length(1),
         ])
         .areas(rect);
 
@@ -93,13 +94,18 @@ impl Component for PostView {
 
         let spans = vec![
             Span::raw(" << Press "),
-            Span::styled("q", Style::default().magenta().underlined()),
+            Span::styled(
+                "q",
+                Style::default()
+                    .underlined()
+                    .fg(self.post.ctx.config.general.accent_color),
+            ),
             Span::raw(" to go back."),
         ];
 
         let how_to_quit = Paragraph::new(Line::from(spans));
 
-        f.render_widget(how_to_quit, top_bar);
+        f.render_widget(how_to_quit, keybinds_bar);
 
         let [_, rect, _] = Layout::horizontal([
             Constraint::Fill(1),
