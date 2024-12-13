@@ -1,14 +1,27 @@
+<img align="left" width="100" height="100" src="https://github.com/user-attachments/assets/57aa5eaa-3d7a-4038-9ece-c3ebd9ca46d2">
+
+**Lemmynator**
+
+Performant TUI for Lemmy that looks cool and one that might become your daily-driver one day.  
+Currently it's still in early development, but it's getting there.
+
+# 
 <div align="center">
-    <h1><strong>Lemmynator</strong></h1>
+    <img src="https://github.com/user-attachments/assets/52301f5c-0cbb-40a0-9ef7-e457e684bf76"/>
     <p>
-	    <strong>TUI for Lemmy</strong>
+        <small>Posts shown here were chosen randomly</small>
     </p>
-    <img src="https://codeberg.org/micielski/lemmynator/raw/branch/main/imgs/image.png" />
 </div>
 
 ## Features
 
-- **Scrolling**
+- **Scrolling**: Whether you want to see local posts or all, it's all here
+
+## Requirements
+
+- [Account on Lemmy](https://join-lemmy.org/)
+- [Nerd Fonts](https://www.nerdfonts.com/)
+
 
 ## Installation
 
