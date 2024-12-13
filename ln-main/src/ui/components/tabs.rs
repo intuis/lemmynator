@@ -127,7 +127,7 @@ impl Component for TabComponent {
         //     .highlight_style(Style::default().fg(self.ctx.config.general.accent_color.as_ratatui()))
         //     .select(self.current_tab as usize)
         //     .divider(symbols::DOT);
-        let listing_type_tabs = Tabs::new().color(Color::Magenta);
+        let listing_type_tabs = Tabs::new().color(self.ctx.config.general.accent_color);
         // .style(Style::default().white())
         // .highlight_style(Style::default().fg(self.ctx.config.general.accent_color.as_ratatui()))
         // .select(self.current_tab as usize)
@@ -141,7 +141,7 @@ impl Component for TabComponent {
                 "4",
                 Style::default()
                     .underlined()
-                    .underline_color(Color::Magenta),
+                    .underline_color(self.ctx.config.general.accent_color),
             ),
             Span::from("."),
             Span::from(sort_string),

@@ -321,7 +321,7 @@ impl LemmynatorPost {
 
     fn border_style(&self) -> Style {
         if self.is_focused {
-            Style::default().fg(self.ctx.config.general.accent_color.as_ratatui())
+            Style::default().fg(self.ctx.config.general.accent_color)
         } else {
             Style::default()
         }
@@ -337,7 +337,7 @@ impl LemmynatorPost {
 
     fn border_separator_span(&self) -> Span<'static> {
         if self.is_focused {
-            '━'.to_span().magenta()
+            '━'.to_span().fg(self.ctx.config.general.accent_color)
         } else {
             '─'.to_span()
         }
@@ -397,9 +397,7 @@ impl LemmynatorPost {
         if self.is_focused {
             spans.push(Span::styled(
                 if self.is_image_only() { " " } else { "" },
-                Style::new()
-                    .fg(self.ctx.config.general.accent_color.as_ratatui())
-                    .bold(),
+                Style::new().fg(self.ctx.config.general.accent_color).bold(),
             ));
         }
 
@@ -441,7 +439,7 @@ impl LemmynatorPost {
                 spans.push(Span::styled(
                     "󰁥  ",
                     if self.is_focused {
-                        Style::new().magenta()
+                        Style::new().fg(self.ctx.config.general.accent_color)
                     } else {
                         Style::new().white()
                     },

@@ -1,5 +1,7 @@
 use core::panic;
+use std::fmt::Display;
 
+use intui_tabs::{Tabs, TabsState};
 use ratatui::{
     layout::{Alignment, Constraint, Layout, Margin, Rect},
     style::{Style, Stylize},
@@ -13,8 +15,32 @@ use crate::action::{Action, UpdateAction};
 
 use super::{components::Component, listing::lemmynator_post::LemmynatorPost};
 
+#[derive(Clone, Copy)]
+enum CurrentTab {
+    Overview,
+    Post,
+    Comments,
+}
+
+impl Default for CurrentTab {
+    fn default() -> Self {
+        Self::Overview
+    }
+}
+
+impl Display for CurrentTab {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CurrentTab::Overview => write!(f, "Overview"),
+            CurrentTab::Post => write!(f, "Post"),
+            CurrentTab::Comments => write!(f, "Comments"),
+        }
+    }
+}
+
 pub struct PostView {
     pub post: LemmynatorPost,
+    tabs_state: TabsState<CurrentTab>,
     zoom_amount: u16,
 }
 
@@ -23,10 +49,13 @@ impl PostView {
         Self {
             post,
             zoom_amount: 0,
+            tabs_state: TabsState::new(vec![
+                CurrentTab::Overview,
+                CurrentTab::Post,
+                CurrentTab::Comments,
+            ]),
         }
     }
-
-    fn render_with_image(&mut self, f: &mut Frame, rect: Rect) {}
 }
 
 impl Component for PostView {
@@ -49,18 +78,34 @@ impl Component for PostView {
     }
 
     fn render(&mut self, f: &mut Frame, rect: Rect) {
-        let [top_bar, rect] =
-            Layout::vertical([Constraint::Length(1), Constraint::Fill(1)]).areas(rect);
+        let [sub_tab, _, rect, keybinds_bar] = Layout::vertical([
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Fill(1),
+            Constraint::Length(1),
+        ])
+        .areas(rect);
+
+        let tabs = Tabs::new()
+            .center(true)
+            .beginner_mode(true)
+            .color(self.post.ctx.config.general.accent_color);
+        f.render_stateful_widget(tabs, sub_tab, &mut self.tabs_state);
 
         let spans = vec![
             Span::raw(" << Press "),
-            Span::styled("q", Style::default().magenta().underlined()),
+            Span::styled(
+                "q",
+                Style::default()
+                    .underlined()
+                    .fg(self.post.ctx.config.general.accent_color),
+            ),
             Span::raw(" to go back."),
         ];
 
         let how_to_quit = Paragraph::new(Line::from(spans));
 
-        f.render_widget(how_to_quit, top_bar);
+        f.render_widget(how_to_quit, keybinds_bar);
 
         let [_, rect, _] = Layout::horizontal([
             Constraint::Fill(1),

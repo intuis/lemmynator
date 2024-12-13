@@ -43,7 +43,7 @@ impl TopBar {
             } else {
                 Span::styled(
                     format!(" 󱅫 {total_unreads}"),
-                    Style::new().fg(self.ctx.config.general.accent_color.as_ratatui()),
+                    Style::new().fg(self.ctx.config.general.accent_color),
                 )
             }
         });
