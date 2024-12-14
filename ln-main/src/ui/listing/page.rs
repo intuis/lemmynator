@@ -17,6 +17,7 @@ pub struct Page {
     pub posts_offset: usize,
     pub currently_focused: u8,
     pub currently_displaying: u8,
+    pub all_posts_count: usize,
     ctx: Arc<Ctx>,
 }
 
@@ -29,6 +30,7 @@ impl Page {
             currently_focused: 0,
             currently_displaying: 0,
             ctx,
+            all_posts_count: 0,
         }
     }
 
@@ -121,13 +123,16 @@ impl Page {
         }
     }
 
+    fn current_page(&self) -> usize {
+        ((self.all_posts_count / self.currently_displaying as usize)
+            - (self.posts.len() - self.posts_offset) / self.currently_displaying as usize)
+            + 1
+    }
+
     pub fn render_bottom_bar(&mut self, f: &mut Frame, rect: Rect) {
         if self.currently_displaying != 0 {
-            let current_page_paragraph = Paragraph::new(format!(
-                "{} / ",
-                (self.posts_offset / self.currently_displaying as usize) + 1,
-            ))
-            .alignment(Alignment::Center);
+            let current_page_paragraph =
+                Paragraph::new(format!("{} / ", self.current_page())).alignment(Alignment::Center);
             f.render_widget(current_page_paragraph, rect);
         }
     }

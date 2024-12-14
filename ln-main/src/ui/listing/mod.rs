@@ -109,6 +109,7 @@ impl Component for Listing {
                         .map(|post| LemmynatorPost::from_lemmy_post(post, self.ctx.clone()))
                         .collect();
 
+                    self.page_data.all_posts_count += new_posts.len();
                     self.page_data.posts.append(&mut new_posts);
                     self.page_data.next_page = new_page.next_page;
                     self.can_fetch_new_pages.store(true, Ordering::SeqCst);
