@@ -28,5 +28,5 @@ crossterm = { version = "0.28", features = ["event-stream"] }
 ratatui = { version = "0.29", features = ["serde"] }
 ratatui-image = "3.0.0"
 tui-input = "0.11"
-intui-tabs = "0.3.0"
+intui-tabs = "0.4.0"
 tui-scrollview = "0.5"

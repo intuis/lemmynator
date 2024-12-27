@@ -1,4 +1,3 @@
-use core::panic;
 use std::fmt::Display;
 
 use intui_tabs::{Tabs, TabsState};
@@ -6,7 +5,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Layout, Margin, Rect},
     style::{Style, Stylize},
     text::{Line, Span},
-    widgets::{block::Title, Block, Borders, Paragraph},
+    widgets::{block::Title, Block, Borders, Paragraph, Wrap},
     Frame,
 };
 use ratatui_image::StatefulImage;
@@ -89,6 +88,7 @@ impl Component for PostView {
         let tabs = Tabs::new()
             .center(true)
             .beginner_mode(true)
+            .sub_tab(true)
             .color(self.post.ctx.config.general.accent_color);
         f.render_stateful_widget(tabs, sub_tab, &mut self.tabs_state);
 
@@ -201,21 +201,18 @@ impl Component for PostView {
                     f.render_widget(no_comments_paragraph, comments_rect);
                 } else {
                     let mut place_used: u16 = 0;
-                    let mut replies_to_skip = 0;
                     for (idx, comment) in comments.iter().enumerate() {
-                        if replies_to_skip != 0 {
-                            replies_to_skip -= 1;
+                        if !comment.comment.path.split('.').count() == 2 {
                             continue;
-                        }
-                        if comment.counts.child_count != 0 {
-                            replies_to_skip = comment.counts.child_count;
                         }
 
                         let place_to_be_consumed = {
                             let mut count = 0;
                             for line in comment.comment.content.lines() {
-                                if (line.len() / (comments_rect.width - 2) as usize) > 1 {
-                                    count += line.len() / (comments_rect.width - 2) as usize;
+                                let line_by_rect_width =
+                                    (line.len() as f64 / (comments_rect.width - 2) as f64).ceil();
+                                if line_by_rect_width > 1f64 {
+                                    count += line_by_rect_width as usize;
                                 } else {
                                     count += 1;
                                 }
@@ -239,7 +236,8 @@ impl Component for PostView {
                         block_rect.height = place_to_be_consumed as u16;
                         f.render_widget(block, block_rect);
                         f.render_widget(
-                            Paragraph::new(comment.comment.content.as_str()),
+                            Paragraph::new(comment.comment.content.as_str())
+                                .wrap(Wrap { trim: true }),
                             block_rect.inner(Margin {
                                 horizontal: 1,
                                 vertical: 1,
