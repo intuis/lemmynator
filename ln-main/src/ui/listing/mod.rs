@@ -12,7 +12,6 @@ use lemmy_api_common::{
     lemmy_db_views::structs::PaginationCursor,
     post::{GetPosts, GetPostsResponse},
 };
-use lemmynator_post::LemmynatorPost;
 use ratatui::{prelude::*, widgets::Paragraph};
 
 use self::page::Page;
@@ -20,6 +19,7 @@ use super::{centered_rect, components::Component};
 use crate::{
     action::{Action, UpdateAction},
     app::Ctx,
+    types::LemmynatorPost,
 };
 
 pub struct Listing {

@@ -6,7 +6,7 @@ use lemmy_api_common::{
     post::GetPostsResponse,
 };
 
-use crate::{tui::Event, ui::listing::lemmynator_post::LemmynatorPost};
+use crate::{tui::Event, types::LemmynatorPost};
 
 #[derive(Clone)]
 pub enum UpdateAction {

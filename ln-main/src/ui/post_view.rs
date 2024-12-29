@@ -1,18 +1,21 @@
-use std::fmt::Display;
+use std::{cmp::max, fmt::Display};
 
 use intui_tabs::{Tabs, TabsState};
 use ratatui::{
-    layout::{Alignment, Constraint, Layout, Margin, Rect},
+    layout::{Alignment, Constraint, Layout, Margin, Offset, Rect},
     style::{Style, Stylize},
     text::{Line, Span},
     widgets::{block::Title, Block, Borders, Paragraph, Wrap},
     Frame,
 };
-use ratatui_image::StatefulImage;
+use ratatui_image::{picker, protocol::ImageSource, StatefulImage};
 
-use crate::action::{Action, UpdateAction};
+use crate::{
+    action::{Action, UpdateAction},
+    types::{CommentImage, LemmynatorPost},
+};
 
-use super::{components::Component, listing::lemmynator_post::LemmynatorPost};
+use super::components::Component;
 
 #[derive(Clone, Copy)]
 enum CurrentTab {
@@ -107,7 +110,7 @@ impl Component for PostView {
 
         f.render_widget(how_to_quit, keybinds_bar);
 
-        let [_, rect, _] = Layout::horizontal([
+        let [left_side_rect, rect, _] = Layout::horizontal([
             Constraint::Fill(1),
             Constraint::Percentage(75),
             Constraint::Fill(1),
@@ -143,7 +146,7 @@ impl Component for PostView {
             body_rect = Some(image_body_rect);
             comments_rect = Some(image_comments_rect);
 
-            let image_state = StatefulImage::new(None);
+            let image_state = StatefulImage::default();
 
             f.render_stateful_widget(image_state, image_rect, &mut image.image);
             f.render_widget(
@@ -193,7 +196,7 @@ impl Component for PostView {
             });
 
             if let Some(comments) = &self.post.comments {
-                if comments.is_empty() {
+                if comments.comments.is_empty() {
                     let no_comments_paragraph =
                         Paragraph::new("\nNo comments yet! Be the first to share your thoughts.")
                             .dim()
@@ -201,14 +204,10 @@ impl Component for PostView {
                     f.render_widget(no_comments_paragraph, comments_rect);
                 } else {
                     let mut place_used: u16 = 0;
-                    for (idx, comment) in comments.iter().enumerate() {
-                        if !comment.comment.path.split('.').count() == 2 {
-                            continue;
-                        }
-
+                    for comment in &comments.comments {
                         let place_to_be_consumed = {
                             let mut count = 0;
-                            for line in comment.comment.content.lines() {
+                            for line in comment.content.lines() {
                                 let line_by_rect_width =
                                     (line.len() as f64 / (comments_rect.width - 2) as f64).ceil();
                                 if line_by_rect_width > 1f64 {
@@ -221,7 +220,7 @@ impl Component for PostView {
                             count
                         };
 
-                        let block = Block::bordered().title(comment.creator.name.as_str());
+                        let block = Block::bordered().title(comment.author.name.as_str());
                         let mut block_rect = comments_rect.inner(Margin {
                             horizontal: 0,
                             vertical: place_used,
@@ -236,16 +235,97 @@ impl Component for PostView {
                         block_rect.height = place_to_be_consumed as u16;
                         f.render_widget(block, block_rect);
                         f.render_widget(
-                            Paragraph::new(comment.comment.content.as_str())
-                                .wrap(Wrap { trim: true }),
+                            Paragraph::new(comment.content.as_str()).wrap(Wrap { trim: true }),
                             block_rect.inner(Margin {
                                 horizontal: 1,
                                 vertical: 1,
                             }),
                         );
+
+                        let mut avatar_image_lock = comment.author.avatar.image.lock().unwrap();
+
+                        let new_image = avatar_image_lock.take().and_then(|image| match image {
+                            CommentImage::StatelessImage(image) => {
+                                Some(CommentImage::StatefulImage((
+                                    (image.width(), image.height()),
+                                    self.post
+                                        .ctx
+                                        .picker
+                                        .lock()
+                                        .unwrap()
+                                        .new_resize_protocol(image),
+                                )))
+                            }
+                            CommentImage::StatefulImage(stateful) => {
+                                Some(CommentImage::StatefulImage(stateful))
+                            }
+                        });
+
+                        *avatar_image_lock = new_image;
+
+                        match &mut *avatar_image_lock {
+                            Some(CommentImage::StatefulImage(ref mut image)) => {
+                                let widget_state = StatefulImage::default();
+                                let mut avatar_rect = block_rect
+                                    .offset(Offset {
+                                        x: -i32::from(left_side_rect.width) + 1,
+                                        y: 0,
+                                    })
+                                    .inner(Margin {
+                                        horizontal: 1,
+                                        vertical: 1,
+                                    });
+
+                                avatar_rect.width = left_side_rect.width;
+
+                                let image_res = image.0;
+                                let image = &mut image.1;
+                                let image_rect = ImageSource::round_pixel_size_to_cells(
+                                    image_res.0,
+                                    image_res.1,
+                                    self.post.ctx.picker.lock().unwrap().font_size(),
+                                );
+
+                                let new_dims = fit_area_proportionally(
+                                    image_rect.width,
+                                    image_rect.height,
+                                    avatar_rect.width,
+                                    avatar_rect.height,
+                                );
+
+                                let avatar_rect = avatar_rect.offset(Offset {
+                                    x: (left_side_rect.width - new_dims.0) as i32 - 3,
+                                    y: 0,
+                                });
+
+                                f.render_stateful_widget(widget_state, avatar_rect, image);
+                            }
+                            Some(_) => unreachable!(),
+                            None => (),
+                        }
                     }
                 }
             }
         }
+    }
+}
+
+fn fit_area_proportionally(width: u16, height: u16, nwidth: u16, nheight: u16) -> (u16, u16) {
+    let wratio = nwidth as f64 / width as f64;
+    let hratio = nheight as f64 / height as f64;
+
+    let ratio = f64::min(wratio, hratio);
+
+    let nw = max((width as f64 * ratio).round() as u64, 1);
+    let nh = max((height as f64 * ratio).round() as u64, 1);
+
+    if nw > u64::from(u16::MAX) {
+        let ratio = u16::MAX as f64 / width as f64;
+        (u16::MAX, max((height as f64 * ratio).round() as u16, 1))
+    } else if nh > u64::from(u16::MAX) {
+        let ratio = u16::MAX as f64 / height as f64;
+        (max((width as f64 * ratio).round() as u16, 1), u16::MAX)
+    } else {
+        (nw as u16, nh as u16)
     }
 }

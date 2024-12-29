@@ -98,7 +98,7 @@ impl Component for MainWindow {
             }
             UpdateAction::CommentsForCurrentPost(comments) => {
                 if let Some(post_view) = &mut self.post_view {
-                    post_view.post.comments = Some(comments.comments);
+                    post_view.post.comments = Some(comments.comments.into());
                     self.ctx.send_action(Action::Render);
                 }
             }

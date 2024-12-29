@@ -1,6 +1,7 @@
 mod action;
 mod app;
 mod tui;
+pub mod types;
 mod ui;
 
 use anyhow::Result;
