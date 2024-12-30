@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 
 use image::GenericImageView;
 use lemmy_api_common::lemmy_db_schema::newtypes::{CommunityId, PostId};
-use lemmy_api_common::lemmy_db_views::structs::{CommentView, PostView};
+use lemmy_api_common::lemmy_db_views::structs::PostView;
 use lemmy_api_common::post::CreatePostLike;
 use ratatui::prelude::*;
 use ratatui::widgets::block::{Position, Title};
