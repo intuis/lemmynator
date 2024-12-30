@@ -13,7 +13,6 @@ use super::{
 use anyhow::Result;
 use lemmy_api_common::{
     comment::{GetComments, GetCommentsResponse},
-    lemmy_db_schema::SortType,
     person::GetUnreadCountResponse,
 };
 use ratatui::prelude::*;

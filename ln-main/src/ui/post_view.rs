@@ -71,6 +71,9 @@ impl Component for PostView {
                 self.zoom_amount += 5;
                 self.post.ctx.send_action(Action::Render);
             }
+            Action::ChangeSubTab(n) => {
+                self.tabs_state.set(n.into());
+            }
             _ => (),
         }
     }
@@ -215,7 +218,26 @@ impl Component for PostView {
                 }
             }
             CurrentTab::Post => todo!(),
-            CurrentTab::Comments => todo!(),
+            CurrentTab::Comments => {
+                let comments_rect = rect;
+                if let Some(comments) = &self.post.comments {
+                    if comments.comments.is_empty() {
+                        let no_comments_paragraph = Paragraph::new(
+                            "\nNo comments yet! Be the first to share your thoughts.",
+                        )
+                        .dim()
+                        .centered();
+                        f.render_widget(no_comments_paragraph, comments_rect);
+                    } else {
+                        LemmynatorPostCommentsWidget::new(
+                            self.post.ctx.clone(),
+                            &comments.comments,
+                        )
+                        .left_sife_width(left_side_rect.width)
+                        .render(f, comments_rect);
+                    }
+                }
+            }
         }
     }
 }
