@@ -198,7 +198,7 @@ impl Component for PostView {
                         vertical: 1,
                     });
 
-                    if let Some(comments) = &self.post.comments {
+                    if let Some(comments) = &mut self.post.comments {
                         if comments.comments.is_empty() {
                             let no_comments_paragraph = Paragraph::new(
                                 "\nNo comments yet! Be the first to share your thoughts.",
@@ -209,7 +209,7 @@ impl Component for PostView {
                         } else {
                             LemmynatorPostCommentsWidget::new(
                                 self.post.ctx.clone(),
-                                &comments.comments,
+                                &mut comments.comments,
                             )
                             .left_sife_width(left_side_rect.width)
                             .render(f, comments_rect);
@@ -220,7 +220,7 @@ impl Component for PostView {
             CurrentTab::Post => todo!(),
             CurrentTab::Comments => {
                 let comments_rect = rect;
-                if let Some(comments) = &self.post.comments {
+                if let Some(comments) = &mut self.post.comments {
                     if comments.comments.is_empty() {
                         let no_comments_paragraph = Paragraph::new(
                             "\nNo comments yet! Be the first to share your thoughts.",
@@ -231,7 +231,7 @@ impl Component for PostView {
                     } else {
                         LemmynatorPostCommentsWidget::new(
                             self.post.ctx.clone(),
-                            &comments.comments,
+                            &mut comments.comments,
                         )
                         .left_sife_width(left_side_rect.width)
                         .render(f, comments_rect);

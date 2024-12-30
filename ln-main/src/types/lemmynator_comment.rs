@@ -4,9 +4,10 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use bytes::BufMut;
 use image::DynamicImage;
-use lemmy_api_common::lemmy_db_views::structs::CommentView;
+use lemmy_api_common::{
+    lemmy_db_schema::source::comment_reply, lemmy_db_views::structs::CommentView,
+};
 use ratatui::{
     layout::{Margin, Offset},
     prelude::Rect,
@@ -187,12 +188,12 @@ fn recursive_function(
 
 pub struct LemmynatorPostCommentsWidget<'a> {
     left_side_width: u16,
-    comments: &'a HashMap<i32, LemmynatorComment>,
+    comments: &'a mut HashMap<i32, LemmynatorComment>,
     ctx: Arc<app::Ctx>,
 }
 
 impl<'a> LemmynatorPostCommentsWidget<'a> {
-    pub fn new(ctx: Arc<app::Ctx>, comments: &'a HashMap<i32, LemmynatorComment>) -> Self {
+    pub fn new(ctx: Arc<app::Ctx>, comments: &'a mut HashMap<i32, LemmynatorComment>) -> Self {
         Self {
             left_side_width: 0,
             comments,
@@ -209,100 +210,139 @@ impl<'a> LemmynatorPostCommentsWidget<'a> {
     }
 }
 
+struct LemmynatorCommentWidget<'a> {
+    comment: &'a LemmynatorComment,
+    left_side_width: u16,
+    ctx: Arc<app::Ctx>,
+}
+
+impl<'a> LemmynatorCommentWidget<'a> {
+    fn new(comment: &'a LemmynatorComment, left_side_width: u16, ctx: Arc<app::Ctx>) -> Self {
+        Self {
+            comment,
+            left_side_width,
+            ctx,
+        }
+    }
+}
+
+impl<'a> Component for LemmynatorCommentWidget<'a> {
+    fn render(&mut self, f: &mut ratatui::Frame, rect: Rect) {
+        let block = Block::bordered().title(self.comment.author.name.as_str());
+        f.render_widget(block, rect);
+        f.render_widget(
+            Paragraph::new(self.comment.content.as_str()).wrap(Wrap { trim: true }),
+            rect.inner(Margin {
+                horizontal: 1,
+                vertical: 1,
+            }),
+        );
+
+        let mut avatar_image_lock = self.comment.author.avatar.image.lock().unwrap();
+
+        let new_image = avatar_image_lock.take().and_then(|image| match image {
+            CommentImage::StatelessImage(image) => Some(CommentImage::StatefulImage((
+                (image.width(), image.height()),
+                self.ctx.picker.lock().unwrap().new_resize_protocol(image),
+            ))),
+            CommentImage::StatefulImage(stateful) => Some(CommentImage::StatefulImage(stateful)),
+        });
+
+        *avatar_image_lock = new_image;
+
+        match &mut *avatar_image_lock {
+            Some(CommentImage::StatefulImage(ref mut image)) => {
+                let widget_state = StatefulImage::default();
+                let mut avatar_rect = rect
+                    .offset(Offset {
+                        x: -i32::from(self.left_side_width) + 1,
+                        y: 0,
+                    })
+                    .inner(Margin {
+                        horizontal: 1,
+                        vertical: 1,
+                    });
+
+                avatar_rect.width = self.left_side_width;
+
+                if avatar_rect.height >= 3 {
+                    avatar_rect.height = 2;
+                }
+
+                let image_res = image.0;
+                let image = &mut image.1;
+                let image_rect = ImageSource::round_pixel_size_to_cells(
+                    image_res.0,
+                    image_res.1,
+                    self.ctx.picker.lock().unwrap().font_size(),
+                );
+
+                let new_dims = fit_area_proportionally(
+                    image_rect.width,
+                    image_rect.height,
+                    avatar_rect.width,
+                    avatar_rect.height,
+                );
+
+                let avatar_rect = avatar_rect.offset(Offset {
+                    x: (self.left_side_width - new_dims.0) as i32 - 3,
+                    y: 0,
+                });
+
+                f.render_stateful_widget(widget_state, avatar_rect, image);
+            }
+            Some(_) => unreachable!(),
+            None => (),
+        }
+    }
+}
+
 impl<'a> Component for LemmynatorPostCommentsWidget<'a> {
-    fn handle_actions(&mut self, action: crate::action::Action) {
-        let _ = action;
-    }
-
-    fn handle_update_action(&mut self, action: crate::action::UpdateAction) {
-        let _ = action;
-    }
-
     fn render(&mut self, f: &mut ratatui::Frame, rect: Rect) {
         let mut place_used: u16 = 0;
 
-        for (comment_id, comment) in self.comments {
+        for (comment_id, comment) in self.comments.iter_mut() {
             let place_to_be_consumed = comment.how_many_lines_will_consume(rect.width);
 
-            let block = Block::bordered().title(comment.author.name.as_str());
-            let mut block_rect = rect.inner(Margin {
+            let mut comment_rect = rect.inner(Margin {
                 horizontal: 0,
                 vertical: place_used,
             });
 
-            if place_used + place_to_be_consumed as u16 >= rect.height {
+            if place_used + place_to_be_consumed as u16 > rect.height {
                 continue;
             } else {
                 place_used += place_to_be_consumed as u16;
             }
+            comment_rect.height = place_to_be_consumed as u16;
 
-            block_rect.height = place_to_be_consumed as u16;
-            f.render_widget(block, block_rect);
-            f.render_widget(
-                Paragraph::new(comment.content.as_str()).wrap(Wrap { trim: true }),
-                block_rect.inner(Margin {
-                    horizontal: 1,
-                    vertical: 1,
-                }),
-            );
+            LemmynatorCommentWidget::new(&comment, self.left_side_width, self.ctx.clone())
+                .render(f, comment_rect);
 
-            let mut avatar_image_lock = comment.author.avatar.image.lock().unwrap();
+            if !comment.replies.is_empty() {
+                let comment_reply = comment.replies.iter().nth(0).unwrap().1;
+                let place_to_be_consumed =
+                    comment_reply.how_many_lines_will_consume(rect.width - 4);
+                place_used += place_to_be_consumed as u16;
 
-            let new_image = avatar_image_lock.take().and_then(|image| match image {
-                CommentImage::StatelessImage(image) => Some(CommentImage::StatefulImage((
-                    (image.width(), image.height()),
-                    self.ctx.picker.lock().unwrap().new_resize_protocol(image),
-                ))),
-                CommentImage::StatefulImage(stateful) => {
-                    Some(CommentImage::StatefulImage(stateful))
-                }
-            });
-
-            *avatar_image_lock = new_image;
-
-            match &mut *avatar_image_lock {
-                Some(CommentImage::StatefulImage(ref mut image)) => {
-                    let widget_state = StatefulImage::default();
-                    let mut avatar_rect = block_rect
-                        .offset(Offset {
-                            x: -i32::from(self.left_side_width) + 1,
-                            y: 0,
-                        })
-                        .inner(Margin {
-                            horizontal: 1,
-                            vertical: 1,
-                        });
-
-                    avatar_rect.width = self.left_side_width;
-
-                    if avatar_rect.height >= 3 {
-                        avatar_rect.height = 2;
-                    }
-
-                    let image_res = image.0;
-                    let image = &mut image.1;
-                    let image_rect = ImageSource::round_pixel_size_to_cells(
-                        image_res.0,
-                        image_res.1,
-                        self.ctx.picker.lock().unwrap().font_size(),
-                    );
-
-                    let new_dims = fit_area_proportionally(
-                        image_rect.width,
-                        image_rect.height,
-                        avatar_rect.width,
-                        avatar_rect.height,
-                    );
-
-                    let avatar_rect = avatar_rect.offset(Offset {
-                        x: (self.left_side_width - new_dims.0) as i32 - 3,
-                        y: 0,
+                let mut reply_rect = comment_rect
+                    .offset(Offset {
+                        x: 4,
+                        y: comment_rect.height as i32,
+                    })
+                    .inner(Margin {
+                        horizontal: 4,
+                        vertical: 0,
                     });
 
-                    f.render_stateful_widget(widget_state, avatar_rect, image);
-                }
-                Some(_) => unreachable!(),
-                None => (),
+                reply_rect.height = place_to_be_consumed as u16;
+
+                LemmynatorCommentWidget::new(
+                    &comment_reply,
+                    self.left_side_width,
+                    self.ctx.clone(),
+                )
+                .render(f, reply_rect);
             }
         }
     }
