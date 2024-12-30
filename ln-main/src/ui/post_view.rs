@@ -1,18 +1,18 @@
-use std::{cmp::max, fmt::Display};
+use std::fmt::Display;
 
 use intui_tabs::{Tabs, TabsState};
 use ratatui::{
-    layout::{Alignment, Constraint, Layout, Margin, Offset, Rect},
+    layout::{Alignment, Constraint, Layout, Margin, Rect},
     style::{Style, Stylize},
     text::{Line, Span},
-    widgets::{block::Title, Block, Borders, Paragraph, Wrap},
+    widgets::{block::Title, Block, Borders, Paragraph},
     Frame,
 };
-use ratatui_image::{picker, protocol::ImageSource, StatefulImage};
+use ratatui_image::StatefulImage;
 
 use crate::{
     action::{Action, UpdateAction},
-    types::{CommentImage, LemmynatorPost, LemmynatorPostComments, LemmynatorPostCommentsWidget},
+    types::{LemmynatorPost, LemmynatorPostCommentsWidget},
 };
 
 use super::components::Component;
@@ -80,7 +80,7 @@ impl Component for PostView {
     }
 
     fn render(&mut self, f: &mut Frame, rect: Rect) {
-        let [sub_tab, _, rect, keybinds_bar] = Layout::vertical([
+        let [sub_tab, _, main_rect, keybinds_bar_rect] = Layout::vertical([
             Constraint::Length(1),
             Constraint::Length(1),
             Constraint::Fill(1),
@@ -108,106 +108,114 @@ impl Component for PostView {
 
         let how_to_quit = Paragraph::new(Line::from(spans));
 
-        f.render_widget(how_to_quit, keybinds_bar);
+        f.render_widget(how_to_quit, keybinds_bar_rect);
 
         let [left_side_rect, rect, _] = Layout::horizontal([
             Constraint::Fill(1),
             Constraint::Percentage(75),
             Constraint::Fill(1),
         ])
-        .areas(rect);
+        .areas(main_rect);
 
-        let mut body_rect: Option<Rect> = None;
-        let mut comments_rect: Option<Rect> = None;
+        let body_rect: Option<Rect>;
+        let comments_rect: Option<Rect>;
 
-        let desc_lines = {
-            let mut count = 0;
-            for line in self.post.body.lines() {
-                if (u16::try_from(line.len()).unwrap() / rect.width) >= 1 {
-                    count += (u16::try_from(line.len()).unwrap() / rect.width) + 1;
+        match self.tabs_state.current() {
+            CurrentTab::Overview => {
+                let desc_lines = {
+                    let mut count = 0;
+                    for line in self.post.body.lines() {
+                        if (u16::try_from(line.len()).unwrap() / rect.width) >= 1 {
+                            count += (u16::try_from(line.len()).unwrap() / rect.width) + 1;
+                        } else {
+                            count += 1;
+                        }
+                    }
+                    count
+                };
+                if let Some(image) = &mut *self.post.image_data.lock().unwrap() {
+                    let [_, image_rect, _, image_body_rect, _, image_comments_rect] =
+                        Layout::vertical([
+                            Constraint::Length(3),
+                            Constraint::Percentage(50 + self.zoom_amount),
+                            Constraint::Length(1),
+                            Constraint::Length(desc_lines),
+                            Constraint::Length(1),
+                            Constraint::Percentage(50 - self.zoom_amount),
+                        ])
+                        .areas(rect);
+
+                    body_rect = Some(image_body_rect);
+                    comments_rect = Some(image_comments_rect);
+
+                    let image_state = StatefulImage::default();
+
+                    f.render_stateful_widget(image_state, image_rect, &mut image.image);
+                    f.render_widget(
+                        Block::new().borders(Borders::TOP).title_top(format!(
+                            "{} {} ",
+                            self.post.border_separator(),
+                            self.post.name
+                        )),
+                        rect.inner(Margin {
+                            horizontal: 0,
+                            vertical: 1,
+                        }),
+                    );
                 } else {
-                    count += 1;
+                    let [_, post_body_rect, post_comments_rect] = Layout::vertical([
+                        Constraint::Length(3),
+                        Constraint::Length(desc_lines + 1),
+                        Constraint::Fill(1),
+                    ])
+                    .areas(rect);
+
+                    body_rect = Some(post_body_rect);
+                    comments_rect = Some(post_comments_rect);
                 }
-            }
-            count
-        };
+                if let Some(body_rect) = body_rect {
+                    let body_paragraph = self.post.desc_md_paragraph(body_rect);
+                    f.render_widget(body_paragraph, body_rect);
+                }
+                if let Some(comments_rect) = comments_rect {
+                    f.render_widget(
+                        Block::new()
+                            .borders(Borders::TOP)
+                            .title_top(self.post.footer())
+                            .title_alignment(Alignment::Right)
+                            .title(
+                                Title::from(format!("{} Comments ", self.post.border_separator()))
+                                    .alignment(Alignment::Left),
+                            ),
+                        comments_rect,
+                    );
 
-        if let Some(image) = &mut *self.post.image_data.lock().unwrap() {
-            let [_, image_rect, _, image_body_rect, _, image_comments_rect] = Layout::vertical([
-                Constraint::Length(3),
-                Constraint::Percentage(50 + self.zoom_amount),
-                Constraint::Length(1),
-                Constraint::Length(desc_lines),
-                Constraint::Length(1),
-                Constraint::Percentage(50 - self.zoom_amount),
-            ])
-            .areas(rect);
+                    let comments_rect = comments_rect.inner(Margin {
+                        horizontal: 0,
+                        vertical: 1,
+                    });
 
-            body_rect = Some(image_body_rect);
-            comments_rect = Some(image_comments_rect);
-
-            let image_state = StatefulImage::default();
-
-            f.render_stateful_widget(image_state, image_rect, &mut image.image);
-            f.render_widget(
-                Block::new().borders(Borders::TOP).title_top(format!(
-                    "{} {} ",
-                    self.post.border_separator(),
-                    self.post.name
-                )),
-                rect.inner(Margin {
-                    horizontal: 0,
-                    vertical: 1,
-                }),
-            );
-        } else {
-            let [_, post_body_rect, post_comments_rect] = Layout::vertical([
-                Constraint::Length(3),
-                Constraint::Length(desc_lines + 1),
-                Constraint::Fill(1),
-            ])
-            .areas(rect);
-
-            body_rect = Some(post_body_rect);
-            comments_rect = Some(post_comments_rect);
-        }
-
-        if let Some(body_rect) = body_rect {
-            let body_paragraph = self.post.desc_md_paragraph(body_rect);
-            f.render_widget(body_paragraph, body_rect);
-        }
-
-        if let Some(comments_rect) = comments_rect {
-            f.render_widget(
-                Block::new()
-                    .borders(Borders::TOP)
-                    .title_top(self.post.footer())
-                    .title_alignment(Alignment::Right)
-                    .title(
-                        Title::from(format!("{} Comments ", self.post.border_separator()))
-                            .alignment(Alignment::Left),
-                    ),
-                comments_rect,
-            );
-
-            let comments_rect = comments_rect.inner(Margin {
-                horizontal: 0,
-                vertical: 1,
-            });
-
-            if let Some(comments) = &self.post.comments {
-                if comments.comments.is_empty() {
-                    let no_comments_paragraph =
-                        Paragraph::new("\nNo comments yet! Be the first to share your thoughts.")
+                    if let Some(comments) = &self.post.comments {
+                        if comments.comments.is_empty() {
+                            let no_comments_paragraph = Paragraph::new(
+                                "\nNo comments yet! Be the first to share your thoughts.",
+                            )
                             .dim()
                             .centered();
-                    f.render_widget(no_comments_paragraph, comments_rect);
-                } else {
-                    LemmynatorPostCommentsWidget::new(self.post.ctx.clone(), &comments.comments)
-                        .left_sife_width(left_side_rect.width)
-                        .render(f, comments_rect);
+                            f.render_widget(no_comments_paragraph, comments_rect);
+                        } else {
+                            LemmynatorPostCommentsWidget::new(
+                                self.post.ctx.clone(),
+                                &comments.comments,
+                            )
+                            .left_sife_width(left_side_rect.width)
+                            .render(f, comments_rect);
+                        }
+                    }
                 }
             }
+            CurrentTab::Post => todo!(),
+            CurrentTab::Comments => todo!(),
         }
     }
 }

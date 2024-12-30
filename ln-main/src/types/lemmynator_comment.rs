@@ -164,10 +164,10 @@ impl<'a> Component for LemmynatorPostCommentsWidget<'a> {
                 vertical: place_used,
             });
 
-            place_used += place_to_be_consumed as u16;
-
-            if place_used >= rect.height {
-                break;
+            if place_used + place_to_be_consumed as u16 >= rect.height {
+                continue;
+            } else {
+                place_used += place_to_be_consumed as u16;
             }
 
             block_rect.height = place_to_be_consumed as u16;
