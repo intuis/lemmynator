@@ -1,12 +1,15 @@
 use std::{
     cmp::max,
+    collections::HashMap,
     sync::{Arc, Mutex},
 };
 
+use bytes::BufMut;
 use image::DynamicImage;
 use lemmy_api_common::lemmy_db_views::structs::CommentView;
 use ratatui::{
     layout::{Margin, Offset},
+    prelude::Rect,
     widgets::{Block, Paragraph, Wrap},
 };
 use ratatui_image::{
@@ -18,14 +21,35 @@ use crate::{app, ui::components::Component};
 
 #[derive(Clone)]
 pub struct LemmynatorPostComments {
-    pub comments: Vec<LemmynatorComment>,
+    pub comments: HashMap<i32, LemmynatorComment>,
 }
 
 #[derive(Clone)]
 pub struct LemmynatorComment {
+    pub id: i32,
     pub content: String,
     pub author: Author,
-    pub replies: Vec<LemmynatorComment>,
+    pub path: String,
+    pub replies: HashMap<i32, LemmynatorComment>,
+}
+
+impl LemmynatorComment {
+    fn depth(&self) -> u8 {
+        u8::try_from(self.path.split('.').count() - 1).unwrap()
+    }
+
+    fn how_many_lines_will_consume(&self, width: u16) -> u8 {
+        let mut count = 2;
+        for line in self.content.lines() {
+            let line_by_rect_width = ((line.len() as f64) / (width - 2) as f64).ceil();
+            if line_by_rect_width > 1f64 {
+                count += line_by_rect_width as usize;
+            } else {
+                count += 1;
+            }
+        }
+        u8::try_from(count).unwrap()
+    }
 }
 
 #[derive(Clone)]
@@ -47,75 +71,128 @@ pub enum CommentImage {
 
 static DEFAULT_USER_IMAGE: &[u8; 23864] = include_bytes!("../../imgs/user.png");
 
+impl From<CommentView> for LemmynatorComment {
+    fn from(value: CommentView) -> Self {
+        let avatar = if let Some(avatar_url) = value.creator.avatar {
+            let image = Arc::new(Mutex::new(None));
+            let avatar_url = avatar_url.to_string();
+
+            let avatar_url_clone = avatar_url.to_string();
+            let image_clone = image.clone();
+            tokio::task::spawn(async move {
+                let bytes = reqwest::get(avatar_url_clone)
+                    .await
+                    .unwrap()
+                    .bytes()
+                    .await
+                    .unwrap();
+
+                *image_clone.lock().unwrap() = Some(CommentImage::StatelessImage(
+                    image::load_from_memory(&bytes).unwrap(),
+                ));
+            });
+
+            AuthorAvatar {
+                avatar_url: Some(avatar_url.to_string()),
+                image,
+            }
+        } else {
+            AuthorAvatar {
+                avatar_url: None,
+                image: Arc::new(Mutex::new(Some(CommentImage::StatelessImage(
+                    image::load_from_memory(DEFAULT_USER_IMAGE).unwrap(),
+                )))),
+            }
+        };
+
+        let author = Author {
+            name: value.creator.name,
+            avatar,
+        };
+
+        LemmynatorComment {
+            content: value.comment.content,
+            author,
+            replies: HashMap::new(),
+            id: value.comment.id.0,
+            path: value.comment.path,
+        }
+    }
+}
+
 impl From<Vec<CommentView>> for LemmynatorPostComments {
     fn from(value: Vec<CommentView>) -> Self {
-        let mut comments = vec![];
+        let mut comments = HashMap::new();
         let mut replies_to_a_comment = vec![];
 
         for comment_view in value {
-            if comment_view.comment.path.split('.').count() != 2 {
-                replies_to_a_comment.push(comment_view);
+            let comment_depth = comment_view.comment.path.split('.').count() - 1;
+
+            if comment_depth != 1 {
+                replies_to_a_comment.push(comment_view.into());
                 continue;
             }
 
-            let avatar = if let Some(avatar_url) = comment_view.creator.avatar {
-                let image = Arc::new(Mutex::new(None));
-                let avatar_url = avatar_url.to_string();
+            let lemmynator_comment: LemmynatorComment = comment_view.into();
 
-                let avatar_url_clone = avatar_url.to_string();
-                let image_clone = image.clone();
-                tokio::task::spawn(async move {
-                    let bytes = reqwest::get(avatar_url_clone)
-                        .await
-                        .unwrap()
-                        .bytes()
-                        .await
-                        .unwrap();
-
-                    *image_clone.lock().unwrap() = Some(CommentImage::StatelessImage(
-                        image::load_from_memory(&bytes).unwrap(),
-                    ));
-                });
-
-                AuthorAvatar {
-                    avatar_url: Some(avatar_url.to_string()),
-                    image,
-                }
-            } else {
-                AuthorAvatar {
-                    avatar_url: None,
-                    image: Arc::new(Mutex::new(Some(CommentImage::StatelessImage(
-                        image::load_from_memory(DEFAULT_USER_IMAGE).unwrap(),
-                    )))),
-                }
-            };
-
-            let author = Author {
-                name: comment_view.creator.name,
-                avatar,
-            };
-
-            let comment = LemmynatorComment {
-                content: comment_view.comment.content,
-                author,
-                replies: vec![],
-            };
-
-            comments.push(comment);
+            comments.insert(lemmynator_comment.id, lemmynator_comment);
         }
+
+        recursive_function(&mut comments, replies_to_a_comment, 2);
 
         LemmynatorPostComments { comments }
     }
 }
 
+fn recursive_function(
+    comments: &mut HashMap<i32, LemmynatorComment>,
+    replies_to_a_comment: Vec<LemmynatorComment>,
+    depth: u8,
+) {
+    let mut replies_to_a_comment_left = vec![];
+    for comment in replies_to_a_comment {
+        if comment.depth() != depth {
+            replies_to_a_comment_left.push(comment);
+            continue;
+        }
+
+        let mut path: Vec<_> = comment
+            .path
+            .split('.')
+            .skip(1)
+            .map(|x| x.parse::<i32>().unwrap())
+            .collect();
+        path.pop();
+
+        let mut comments = &mut *comments;
+        loop {
+            if path.len() == 1 {
+                comments
+                    .get_mut(&path[0])
+                    .unwrap()
+                    .replies
+                    .insert(comment.id, comment);
+                break;
+            }
+
+            comments = &mut comments.get_mut(&path[0]).unwrap().replies;
+            path.remove(0);
+        }
+    }
+
+    if !replies_to_a_comment_left.is_empty() {
+        recursive_function(comments, replies_to_a_comment_left, depth + 1);
+    }
+}
+
 pub struct LemmynatorPostCommentsWidget<'a> {
     left_side_width: u16,
-    comments: &'a Vec<LemmynatorComment>,
+    comments: &'a HashMap<i32, LemmynatorComment>,
     ctx: Arc<app::Ctx>,
 }
 
 impl<'a> LemmynatorPostCommentsWidget<'a> {
-    pub fn new(ctx: Arc<app::Ctx>, comments: &'a Vec<LemmynatorComment>) -> Self {
+    pub fn new(ctx: Arc<app::Ctx>, comments: &'a HashMap<i32, LemmynatorComment>) -> Self {
         Self {
             left_side_width: 0,
             comments,
@@ -141,22 +218,11 @@ impl<'a> Component for LemmynatorPostCommentsWidget<'a> {
         let _ = action;
     }
 
-    fn render(&mut self, f: &mut ratatui::Frame, rect: ratatui::prelude::Rect) {
+    fn render(&mut self, f: &mut ratatui::Frame, rect: Rect) {
         let mut place_used: u16 = 0;
 
-        for comment in self.comments {
-            let place_to_be_consumed = {
-                let mut count = 2;
-                for line in comment.content.lines() {
-                    let line_by_rect_width = ((line.len() as f64) / (rect.width - 2) as f64).ceil();
-                    if line_by_rect_width > 1f64 {
-                        count += line_by_rect_width as usize;
-                    } else {
-                        count += 1;
-                    }
-                }
-                count
-            };
+        for (comment_id, comment) in self.comments {
+            let place_to_be_consumed = comment.how_many_lines_will_consume(rect.width);
 
             let block = Block::bordered().title(comment.author.name.as_str());
             let mut block_rect = rect.inner(Margin {
