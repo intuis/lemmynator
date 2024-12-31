@@ -1,6 +1,6 @@
 use std::{
     cmp::max,
-    collections::HashMap,
+    collections::BTreeMap,
     sync::{Arc, Mutex},
 };
 
@@ -22,7 +22,7 @@ use crate::{app, ui::components::Component};
 
 #[derive(Clone)]
 pub struct LemmynatorPostComments {
-    pub comments: HashMap<i32, LemmynatorComment>,
+    pub comments: BTreeMap<i32, LemmynatorComment>,
 }
 
 #[derive(Clone)]
@@ -31,7 +31,7 @@ pub struct LemmynatorComment {
     pub content: String,
     pub author: Author,
     pub path: String,
-    pub replies: HashMap<i32, LemmynatorComment>,
+    pub replies: BTreeMap<i32, LemmynatorComment>,
 }
 
 impl LemmynatorComment {
@@ -66,8 +66,8 @@ pub struct AuthorAvatar {
 }
 
 pub enum CommentImage {
-    StatelessImage(DynamicImage),
-    StatefulImage(((u32, u32), StatefulProtocol)),
+    StatelessImage(DynamicImage, bool),
+    StatefulImage((u32, u32), StatefulProtocol, bool),
 }
 
 static DEFAULT_USER_IMAGE: &[u8; 23864] = include_bytes!("../../imgs/user.png");
@@ -88,9 +88,15 @@ impl From<CommentView> for LemmynatorComment {
                     .await
                     .unwrap();
 
-                *image_clone.lock().unwrap() = Some(CommentImage::StatelessImage(
-                    image::load_from_memory(&bytes).unwrap(),
-                ));
+                let image = match image::load_from_memory(&bytes) {
+                    Ok(image) => Ok(image),
+                    Err(e) => match e {
+                        image::ImageError::Unsupported(_) => return,
+                        _ => Err(e),
+                    },
+                }
+                .unwrap();
+                *image_clone.lock().unwrap() = Some(CommentImage::StatelessImage(image, false));
             });
 
             AuthorAvatar {
@@ -102,6 +108,7 @@ impl From<CommentView> for LemmynatorComment {
                 avatar_url: None,
                 image: Arc::new(Mutex::new(Some(CommentImage::StatelessImage(
                     image::load_from_memory(DEFAULT_USER_IMAGE).unwrap(),
+                    true,
                 )))),
             }
         };
@@ -114,7 +121,7 @@ impl From<CommentView> for LemmynatorComment {
         LemmynatorComment {
             content: value.comment.content,
             author,
-            replies: HashMap::new(),
+            replies: BTreeMap::new(),
             id: value.comment.id.0,
             path: value.comment.path,
         }
@@ -123,7 +130,7 @@ impl From<CommentView> for LemmynatorComment {
 
 impl From<Vec<CommentView>> for LemmynatorPostComments {
     fn from(value: Vec<CommentView>) -> Self {
-        let mut comments = HashMap::new();
+        let mut comments = BTreeMap::new();
         let mut replies_to_a_comment = vec![];
 
         for comment_view in value {
@@ -146,7 +153,7 @@ impl From<Vec<CommentView>> for LemmynatorPostComments {
 }
 
 fn recursive_function(
-    comments: &mut HashMap<i32, LemmynatorComment>,
+    comments: &mut BTreeMap<i32, LemmynatorComment>,
     replies_to_a_comment: Vec<LemmynatorComment>,
     depth: u8,
 ) {
@@ -188,12 +195,12 @@ fn recursive_function(
 
 pub struct LemmynatorPostCommentsWidget<'a> {
     left_side_width: u16,
-    comments: &'a mut HashMap<i32, LemmynatorComment>,
+    comments: &'a mut BTreeMap<i32, LemmynatorComment>,
     ctx: Arc<app::Ctx>,
 }
 
 impl<'a> LemmynatorPostCommentsWidget<'a> {
-    pub fn new(ctx: Arc<app::Ctx>, comments: &'a mut HashMap<i32, LemmynatorComment>) -> Self {
+    pub fn new(ctx: Arc<app::Ctx>, comments: &'a mut BTreeMap<i32, LemmynatorComment>) -> Self {
         Self {
             left_side_width: 0,
             comments,
@@ -241,18 +248,30 @@ impl<'a> Component for LemmynatorCommentWidget<'a> {
         let mut avatar_image_lock = self.comment.author.avatar.image.lock().unwrap();
 
         let new_image = avatar_image_lock.take().and_then(|image| match image {
-            CommentImage::StatelessImage(image) => Some(CommentImage::StatefulImage((
+            CommentImage::StatelessImage(image, is_default) => Some(CommentImage::StatefulImage(
                 (image.width(), image.height()),
                 self.ctx.picker.lock().unwrap().new_resize_protocol(image),
-            ))),
-            CommentImage::StatefulImage(stateful) => Some(CommentImage::StatefulImage(stateful)),
+                is_default,
+            )),
+            CommentImage::StatefulImage(res, image, is_default) => {
+                Some(CommentImage::StatefulImage(res, image, is_default))
+            }
         });
 
         *avatar_image_lock = new_image;
 
         match &mut *avatar_image_lock {
-            Some(CommentImage::StatefulImage(ref mut image)) => {
+            Some(CommentImage::StatefulImage(res, image, is_default)) => {
                 let widget_state = StatefulImage::default();
+
+                let vertical_margin = {
+                    if *is_default && rect.height == 3 {
+                        0
+                    } else {
+                        1
+                    }
+                };
+
                 let mut avatar_rect = rect
                     .offset(Offset {
                         x: -i32::from(self.left_side_width) + 1,
@@ -260,20 +279,20 @@ impl<'a> Component for LemmynatorCommentWidget<'a> {
                     })
                     .inner(Margin {
                         horizontal: 1,
-                        vertical: 1,
+                        vertical: vertical_margin,
                     });
 
                 avatar_rect.width = self.left_side_width;
 
-                if avatar_rect.height >= 3 {
+                if rect.height == 3 && !*is_default {
+                    avatar_rect.height = 1;
+                } else {
                     avatar_rect.height = 2;
                 }
 
-                let image_res = image.0;
-                let image = &mut image.1;
                 let image_rect = ImageSource::round_pixel_size_to_cells(
-                    image_res.0,
-                    image_res.1,
+                    res.0,
+                    res.1,
                     self.ctx.picker.lock().unwrap().font_size(),
                 );
 
@@ -309,7 +328,7 @@ impl<'a> Component for LemmynatorPostCommentsWidget<'a> {
                 vertical: place_used,
             });
 
-            if place_used + place_to_be_consumed as u16 > rect.height {
+            if place_used + place_to_be_consumed as u16 + 2 >= rect.height {
                 continue;
             } else {
                 place_used += place_to_be_consumed as u16;
@@ -323,7 +342,12 @@ impl<'a> Component for LemmynatorPostCommentsWidget<'a> {
                 let comment_reply = comment.replies.iter().nth(0).unwrap().1;
                 let place_to_be_consumed =
                     comment_reply.how_many_lines_will_consume(rect.width - 4);
-                place_used += place_to_be_consumed as u16;
+
+                if place_used + place_to_be_consumed as u16 + 2 >= rect.height {
+                    continue;
+                } else {
+                    place_used += place_to_be_consumed as u16;
+                }
 
                 let mut reply_rect = comment_rect
                     .offset(Offset {
