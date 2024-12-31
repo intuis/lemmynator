@@ -5,9 +5,7 @@ use std::{
 };
 
 use image::DynamicImage;
-use lemmy_api_common::{
-    lemmy_db_schema::source::comment_reply, lemmy_db_views::structs::CommentView,
-};
+use lemmy_api_common::lemmy_db_views::structs::CommentView;
 use ratatui::{
     layout::{Margin, Offset},
     prelude::Rect,
@@ -17,6 +15,7 @@ use ratatui_image::{
     protocol::{ImageSource, StatefulProtocol},
     StatefulImage,
 };
+use tracing::info;
 
 use crate::{app, ui::components::Component};
 
@@ -318,48 +317,68 @@ impl<'a> Component for LemmynatorCommentWidget<'a> {
 
 impl<'a> Component for LemmynatorPostCommentsWidget<'a> {
     fn render(&mut self, f: &mut ratatui::Frame, rect: Rect) {
-        let mut place_used: u16 = 0;
+        let mut lines_left: u16 = rect.height;
 
-        for (comment_id, comment) in self.comments.iter_mut() {
-            let place_to_be_consumed = comment.how_many_lines_will_consume(rect.width);
+        for (_, comment) in self.comments.iter_mut() {
+            if lines_left <= 1 {
+                break;
+            }
 
-            let mut comment_rect = rect.inner(Margin {
-                horizontal: 0,
-                vertical: place_used,
+            let comment_height = comment.how_many_lines_will_consume(rect.width);
+
+            let mut comment_rect = rect.offset(Offset {
+                x: 0,
+                y: (rect.height - lines_left) as i32,
             });
 
-            if place_used + place_to_be_consumed as u16 + 2 >= rect.height {
+            if comment_height as u16 >= lines_left {
+                info!(
+                    "Skipping comment with height of {} (there are {} lines left).",
+                    comment_height, lines_left,
+                );
                 continue;
             } else {
-                place_used += place_to_be_consumed as u16;
+                info!(
+                    "Rendering Comment with height of {}, there are {} lines left",
+                    comment_height, lines_left
+                );
+                lines_left -= comment_height as u16;
             }
-            comment_rect.height = place_to_be_consumed as u16;
+            comment_rect.height = comment_height as u16;
+
+            info!("This is the comment rect: {:?}", comment_rect);
 
             LemmynatorCommentWidget::new(&comment, self.left_side_width, self.ctx.clone())
                 .render(f, comment_rect);
 
             if !comment.replies.is_empty() {
                 let comment_reply = comment.replies.iter().nth(0).unwrap().1;
-                let place_to_be_consumed =
-                    comment_reply.how_many_lines_will_consume(rect.width - 4);
+                let comment_reply_height =
+                    comment_reply.how_many_lines_will_consume(rect.width - 2);
 
-                if place_used + place_to_be_consumed as u16 + 2 >= rect.height {
+                if comment_reply_height as u16 >= lines_left {
                     continue;
                 } else {
-                    place_used += place_to_be_consumed as u16;
+                    info!(
+                        "Reply by {} will take {} lines of space.",
+                        comment_reply.author.name, comment_reply_height
+                    );
+                    lines_left -= comment_reply_height as u16;
                 }
 
                 let mut reply_rect = comment_rect
                     .offset(Offset {
-                        x: 4,
+                        x: 2,
                         y: comment_rect.height as i32,
                     })
                     .inner(Margin {
-                        horizontal: 4,
+                        horizontal: 2,
                         vertical: 0,
                     });
 
-                reply_rect.height = place_to_be_consumed as u16;
+                reply_rect.height = comment_reply_height as u16;
+
+                info!("This is the reply rect: {:?}", reply_rect);
 
                 LemmynatorCommentWidget::new(
                     &comment_reply,

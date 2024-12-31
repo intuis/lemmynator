@@ -9,6 +9,9 @@ edition = "2021"
 ln-config = { path = "../ln-config" }
 
 anyhow = "1"
+tracing = "0.1.41"
+tracing-subscriber =  { version = "0.3.19", features = ["env-filter"] }
+tracing-error = "0.2.1"
 serde = { version = "1", features = ["derive"] }
 lemmy_api_common = "0.19"
 reqwest = { version = "0.12", features = ["json"] }
