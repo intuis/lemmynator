@@ -6,10 +6,9 @@ use ratatui::{prelude::*, widgets::Paragraph};
 use crate::{
     action::{Action, UpdateAction},
     app::Ctx,
+    types::LemmynatorPost,
     ui::components::Component,
 };
-
-use super::lemmynator_post::LemmynatorPost;
 
 pub struct Page {
     pub posts: Vec<LemmynatorPost>,

@@ -1,7 +1,6 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use lemmy_api_common::{lemmy_db_schema::SortType, person::GetUnreadCountResponse};
-use ratatui::layout::{Constraint, Layout};
 
 use crate::{
     action::{Action, UpdateAction},
