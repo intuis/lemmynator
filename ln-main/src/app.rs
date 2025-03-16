@@ -1,14 +1,15 @@
 use std::{
     fs::File,
     io::{Read, Write},
-    sync::{Arc, Mutex},
+    sync::{Arc, LazyLock, Mutex},
 };
 
+use crossterm::event::{KeyCode, KeyModifiers};
 use lemmy_api_common::{
     lemmy_db_schema::sensitive::SensitiveString,
     person::{Login, LoginResponse},
 };
-use ln_config::Config;
+use ln_config::{Config, CONFIG};
 use ratatui_image::picker::Picker;
 use reqwest::{
     header::{HeaderMap, HeaderValue},
@@ -24,6 +25,48 @@ use crate::{
 use anyhow::Result;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
+pub static PICKER: LazyLock<Mutex<Picker>> =
+    LazyLock::new(|| Mutex::new(Picker::from_query_stdio().unwrap()));
+
+pub struct AppKeyEvent(crossterm::event::KeyEvent);
+
+impl From<crossterm::event::KeyEvent> for AppKeyEvent {
+    fn from(value: crossterm::event::KeyEvent) -> Self {
+        Self(value)
+    }
+}
+
+impl AppKeyEvent {
+    pub fn is_ctrl_c(&self) -> bool {
+        if self.0.modifiers == KeyModifiers::CONTROL
+            && (self.0.code == KeyCode::Char('c') || self.0.code == KeyCode::Char('C'))
+        {
+            return true;
+        }
+        false
+    }
+
+    fn keybinding(&self) -> (KeyCode, KeyModifiers) {
+        match self.0.code {
+            KeyCode::Char(e) => {
+                let modifier = if e.is_uppercase() {
+                    KeyModifiers::NONE
+                } else {
+                    self.0.modifiers
+                };
+                (self.0.code, modifier)
+            }
+            _ => (self.0.code, self.0.modifiers),
+        }
+    }
+
+    // fn to_action(&self, current_window: CurrentWindow) -> Option<Action> {}
+}
+
+enum CurrentWindow {
+    Feed,
+}
+
 pub struct App {
     should_quit: bool,
     action_rx: UnboundedReceiver<Action>,
@@ -37,49 +80,37 @@ pub struct Ctx {
     pub action_tx: UnboundedSender<Action>,
     pub update_tx: UnboundedSender<UpdateAction>,
     pub client: Client,
-    pub picker: Mutex<Picker>,
-    pub config: Config,
 }
 
 impl Ctx {
-    pub fn send_action(&self, action: Action) {
-        self.action_tx.send(action).unwrap();
-    }
-
-    pub fn send_update_action(&self, action: UpdateAction) {
-        self.update_tx.send(action).unwrap();
-    }
-}
-
-impl App {
-    pub async fn new(config: Config) -> Result<Self> {
+    async fn new() -> Result<(
+        Self,
+        UnboundedReceiver<Action>,
+        UnboundedReceiver<UpdateAction>,
+    )> {
         let (action_tx, action_rx) = mpsc::unbounded_channel();
         let (update_tx, update_rx) = mpsc::unbounded_channel();
-        let user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
+        let user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
         let client = Client::builder().user_agent(user_agent).build()?;
 
         let login_req = Login {
-            username_or_email: SensitiveString::from(config.connection.username.clone()),
-            password: SensitiveString::from(config.connection.password.clone()),
+            username_or_email: SensitiveString::from(CONFIG.connection.username.clone()),
+            password: SensitiveString::from(CONFIG.connection.password.clone()),
             ..Default::default()
         };
 
         let xdg_dirs = Config::get_xdg_dirs();
         let jwt_file = xdg_dirs.get_cache_file("jwt");
-
         let jwt = if jwt_file.exists() {
             let mut buf = String::new();
-            File::open(jwt_file)
-                .unwrap()
-                .read_to_string(&mut buf)
-                .unwrap();
+            File::open(jwt_file).unwrap().read_to_string(&mut buf)?;
             buf
         } else {
             let res: LoginResponse = client
                 .post(format!(
                     "https://{}/api/v3/user/login",
-                    config.connection.instance
+                    CONFIG.connection.instance
                 ))
                 .json(&login_req)
                 .send()
@@ -89,8 +120,7 @@ impl App {
             let jwt = res.jwt.unwrap().to_string();
             File::create(xdg_dirs.place_cache_file("jwt").unwrap())
                 .unwrap()
-                .write(jwt.as_bytes())
-                .unwrap();
+                .write(jwt.as_bytes())?;
             jwt
         };
 
@@ -104,15 +134,30 @@ impl App {
             .default_headers(header_map)
             .build()?;
 
-        let picker = Picker::from_query_stdio().unwrap();
+        Ok((
+            Ctx {
+                action_tx,
+                update_tx,
+                client,
+            },
+            action_rx,
+            update_rx,
+        ))
+    }
 
-        let ctx = Arc::new(Ctx {
-            action_tx,
-            client,
-            picker: Mutex::new(picker),
-            config,
-            update_tx,
-        });
+    pub fn send_action(&self, action: Action) {
+        self.action_tx.send(action).unwrap();
+    }
+
+    pub fn send_update_action(&self, action: UpdateAction) {
+        self.update_tx.send(action).unwrap();
+    }
+}
+
+impl App {
+    pub async fn new() -> Result<Self> {
+        let (ctx, action_rx, update_rx) = Ctx::new().await?;
+        let ctx = Arc::new(ctx);
 
         Ok(Self {
             should_quit: false,

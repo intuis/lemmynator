@@ -15,6 +15,7 @@ use lemmy_api_common::{
     comment::{GetComments, GetCommentsResponse},
     person::GetUnreadCountResponse,
 };
+use ln_config::CONFIG;
 use ratatui::prelude::*;
 
 pub struct MainWindow {
@@ -118,7 +119,7 @@ impl Component for MainWindow {
                         .client
                         .get(format!(
                             "https://{}/api/v3/comment/list",
-                            _ctx.config.connection.instance
+                            CONFIG.connection.instance
                         ))
                         .query(&params)
                         .send()

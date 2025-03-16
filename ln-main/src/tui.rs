@@ -8,11 +8,14 @@ use crossterm::{
 };
 use futures::{FutureExt, StreamExt};
 use ratatui::backend::CrosstermBackend as Backend;
+use ratatui_image::picker::Picker;
 use tokio::{
     sync::mpsc::{self, UnboundedReceiver, UnboundedSender},
     task::JoinHandle,
 };
 use tokio_util::sync::CancellationToken;
+
+use crate::app::PICKER;
 
 #[derive(Clone, Debug)]
 pub enum Event {
@@ -73,6 +76,7 @@ impl Tui {
                 }
             }
             Some(Ok(CrosstermEvent::Resize(_, _))) => {
+                *PICKER.lock().unwrap() = Picker::from_query_stdio().unwrap();
                 event_tx.send(Event::Render).unwrap();
             }
             Some(Err(_)) => event_tx.send(Event::Error).unwrap(),

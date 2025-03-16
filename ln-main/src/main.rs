@@ -6,7 +6,6 @@ mod ui;
 
 use anyhow::Result;
 use app::App;
-use ln_config::Config;
 use tracing::info;
 
 #[tokio::main(flavor = "multi_thread")]
@@ -16,12 +15,16 @@ async fn main() -> Result<()> {
 
     info!("Lemmynator is starting");
 
-    let config = Config::init()?;
-
-    let mut app = App::new(config).await?;
+    let mut app = App::new().await?;
     app.run().await?;
 
     info!("Lemmynator is quitting");
 
     Ok(())
 }
+
+// async fn run_tui() -> Result<()> {
+//     let app = App::new().await?;
+//     app.run().await?;
+//     Ok(())
+// }

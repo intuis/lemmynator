@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use lemmy_api_common::person::GetUnreadCountResponse;
+use ln_config::CONFIG;
 use ratatui::{
     layout::Rect,
     style::Style,
@@ -43,15 +44,12 @@ impl TopBar {
             } else {
                 Span::styled(
                     format!(" 󱅫 {total_unreads}"),
-                    Style::new().fg(self.ctx.config.general.accent_color),
+                    Style::new().fg(CONFIG.general.accent_color),
                 )
             }
         });
 
-        spans.push(Span::raw(format!(
-            "   {}  ",
-            &self.ctx.config.connection.username
-        )));
+        spans.push(Span::raw(format!("   {}  ", &CONFIG.connection.username)));
         Line::from(spans)
     }
 }
@@ -61,8 +59,7 @@ impl Component for TopBar {
         let paragraph = Paragraph::new(self.menu_text()).right_aligned();
         f.render_widget(paragraph, rect);
 
-        let paragraph =
-            Paragraph::new(format!(" {}", &*self.ctx.config.connection.instance)).left_aligned();
+        let paragraph = Paragraph::new(format!(" {}", &*CONFIG.connection.instance)).left_aligned();
         f.render_widget(paragraph, rect);
 
         self.tabs.render(f, rect);

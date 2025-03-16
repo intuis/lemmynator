@@ -2,7 +2,7 @@ use std::{
     fs::File,
     io::{Read, Write},
     path::PathBuf,
-    sync::OnceLock,
+    sync::{LazyLock, OnceLock},
 };
 
 use anyhow::{bail, Context, Result};
@@ -10,6 +10,13 @@ use ratatui::style::Color;
 use serde::{Deserialize, Serialize};
 use toml::Table;
 use xdg::BaseDirectories;
+
+pub static CONFIG: LazyLock<Config> = LazyLock::new(|| {
+    Config::init().unwrap_or_else(|e| {
+        eprintln!("{:?}", e);
+        std::process::exit(1);
+    })
+});
 
 #[derive(Serialize, Deserialize)]
 pub struct Config {

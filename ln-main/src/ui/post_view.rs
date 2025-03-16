@@ -1,6 +1,7 @@
 use std::fmt::Display;
 
 use intui_tabs::{Tabs, TabsState};
+use ln_config::CONFIG;
 use ratatui::{
     layout::{Alignment, Constraint, Layout, Margin, Rect},
     style::{Style, Stylize},
@@ -95,7 +96,7 @@ impl Component for PostView {
             .center(true)
             .beginner_mode(true)
             .sub_tab(true)
-            .color(self.post.ctx.config.general.accent_color);
+            .color(CONFIG.general.accent_color);
         f.render_stateful_widget(tabs, sub_tab, &mut self.tabs_state);
 
         let spans = vec![
@@ -104,7 +105,7 @@ impl Component for PostView {
                 "q",
                 Style::default()
                     .underlined()
-                    .fg(self.post.ctx.config.general.accent_color),
+                    .fg(CONFIG.general.accent_color),
             ),
             Span::raw(" to go back."),
         ];

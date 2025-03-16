@@ -12,6 +12,7 @@ use lemmy_api_common::{
     lemmy_db_views::structs::PaginationCursor,
     post::{GetPosts, GetPostsResponse},
 };
+use ln_config::CONFIG;
 use ratatui::{prelude::*, widgets::Paragraph};
 
 use self::page::Page;
@@ -75,7 +76,7 @@ impl Listing {
             .client
             .get(format!(
                 "https://{}/api/v3/post/list",
-                ctx.config.connection.instance
+                CONFIG.connection.instance
             ))
             .query(&posts_req);
 

@@ -17,7 +17,10 @@ use ratatui_image::{
 };
 use tracing::info;
 
-use crate::{app, ui::components::Component};
+use crate::{
+    app::{self, PICKER},
+    ui::components::Component,
+};
 
 #[derive(Clone)]
 pub struct LemmynatorPostComments {
@@ -249,7 +252,7 @@ impl<'a> Component for LemmynatorCommentWidget<'a> {
         let new_image = avatar_image_lock.take().and_then(|image| match image {
             CommentImage::StatelessImage(image, is_default) => Some(CommentImage::StatefulImage(
                 (image.width(), image.height()),
-                self.ctx.picker.lock().unwrap().new_resize_protocol(image),
+                PICKER.lock().unwrap().new_resize_protocol(image),
                 is_default,
             )),
             CommentImage::StatefulImage(res, image, is_default) => {
@@ -292,7 +295,7 @@ impl<'a> Component for LemmynatorCommentWidget<'a> {
                 let image_rect = ImageSource::round_pixel_size_to_cells(
                     res.0,
                     res.1,
-                    self.ctx.picker.lock().unwrap().font_size(),
+                    PICKER.lock().unwrap().font_size(),
                 );
 
                 let new_dims = fit_area_proportionally(

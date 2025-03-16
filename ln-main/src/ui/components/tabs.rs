@@ -5,6 +5,7 @@ use crate::{action::Action, app::Ctx};
 use super::Component;
 use intui_tabs::{Tabs, TabsState};
 use lemmy_api_common::lemmy_db_schema::{ListingType, SortType};
+use ln_config::CONFIG;
 use ratatui::{layout::Flex, prelude::*, widgets::Paragraph};
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -122,16 +123,7 @@ impl Component for TabComponent {
         .flex(Flex::Center)
         .areas(top_bar);
 
-        // let listing_type_tabs = Tabs::new(self.tabs_listing_type)
-        //     .style(Style::default().white())
-        //     .highlight_style(Style::default().fg(self.ctx.config.general.accent_color.as_ratatui()))
-        //     .select(self.current_tab as usize)
-        //     .divider(symbols::DOT);
-        let listing_type_tabs = Tabs::new().color(self.ctx.config.general.accent_color);
-        // .style(Style::default().white())
-        // .highlight_style(Style::default().fg(self.ctx.config.general.accent_color.as_ratatui()))
-        // .select(self.current_tab as usize)
-        // .divider(symbols::DOT);
+        let listing_type_tabs = Tabs::new().color(CONFIG.general.accent_color);
 
         let separator_paragraph = Paragraph::new(" ⎥ ").bold();
 
@@ -141,7 +133,7 @@ impl Component for TabComponent {
                 "4",
                 Style::default()
                     .underlined()
-                    .underline_color(self.ctx.config.general.accent_color),
+                    .underline_color(CONFIG.general.accent_color),
             ),
             Span::from("."),
             Span::from(sort_string),

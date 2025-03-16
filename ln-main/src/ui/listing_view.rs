@@ -1,6 +1,7 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use lemmy_api_common::{lemmy_db_schema::SortType, person::GetUnreadCountResponse};
+use ln_config::CONFIG;
 
 use crate::{
     action::{Action, UpdateAction},
@@ -27,7 +28,7 @@ impl ListingView {
                 .client
                 .get(format!(
                     "https://{}/api/v3/user/unread_count",
-                    _ctx.config.connection.instance
+                    CONFIG.connection.instance
                 ))
                 .send()
                 .await
@@ -59,7 +60,7 @@ impl ListingView {
 }
 
 impl Component for ListingView {
-    fn handle_actions(&mut self, action: Action) {}
+    fn handle_actions(&mut self, _action: Action) {}
 
     fn handle_update_action(&mut self, action: crate::action::UpdateAction) {
         match action {
@@ -73,5 +74,5 @@ impl Component for ListingView {
         }
     }
 
-    fn render(&mut self, f: &mut ratatui::Frame, rect: ratatui::prelude::Rect) {}
+    fn render(&mut self, f: &mut ratatui::Frame, _rect: ratatui::prelude::Rect) {}
 }

@@ -5,6 +5,7 @@ use image::GenericImageView;
 use lemmy_api_common::lemmy_db_schema::newtypes::{CommunityId, PostId};
 use lemmy_api_common::lemmy_db_views::structs::PostView;
 use lemmy_api_common::post::CreatePostLike;
+use ln_config::CONFIG;
 use ratatui::prelude::*;
 use ratatui::widgets::block::{Position, Title};
 use ratatui::widgets::{Block, BorderType, Paragraph, Wrap};
@@ -13,7 +14,7 @@ use ratatui_image::StatefulImage;
 use text::ToSpan;
 
 use crate::action::Action;
-use crate::app::Ctx;
+use crate::app::{Ctx, PICKER};
 use crate::ui::components::Component;
 
 use crate::types::lemmynator_comment::LemmynatorPostComments;
@@ -137,7 +138,7 @@ impl LemmynatorPost {
             if let Ok(dyn_image) = dyn_image_res {
                 Some(ImageData {
                     dimensions: dyn_image.dimensions(),
-                    image: ctx.picker.lock().unwrap().new_resize_protocol(dyn_image),
+                    image: PICKER.lock().unwrap().new_resize_protocol(dyn_image),
                 })
             } else {
                 None
@@ -201,7 +202,7 @@ impl LemmynatorPost {
                 ctx.client
                     .post(format!(
                         "https://{}/api/v3/post/like",
-                        ctx.config.connection.instance
+                        CONFIG.connection.instance
                     ))
                     .json(&vote_req)
                     .send()
@@ -321,7 +322,7 @@ impl LemmynatorPost {
 
     fn border_style(&self) -> Style {
         if self.is_focused {
-            Style::default().fg(self.ctx.config.general.accent_color)
+            Style::default().fg(CONFIG.general.accent_color)
         } else {
             Style::default()
         }
@@ -337,7 +338,7 @@ impl LemmynatorPost {
 
     fn border_separator_span(&self) -> Span<'static> {
         if self.is_focused {
-            '━'.to_span().fg(self.ctx.config.general.accent_color)
+            '━'.to_span().fg(CONFIG.general.accent_color)
         } else {
             '─'.to_span()
         }
@@ -397,7 +398,7 @@ impl LemmynatorPost {
         if self.is_focused {
             spans.push(Span::styled(
                 if self.is_image_only() { " " } else { "" },
-                Style::new().fg(self.ctx.config.general.accent_color).bold(),
+                Style::new().fg(CONFIG.general.accent_color).bold(),
             ));
         }
 
@@ -439,7 +440,7 @@ impl LemmynatorPost {
                 spans.push(Span::styled(
                     "󰁥  ",
                     if self.is_focused {
-                        Style::new().fg(self.ctx.config.general.accent_color)
+                        Style::new().fg(CONFIG.general.accent_color)
                     } else {
                         Style::new().white()
                     },
