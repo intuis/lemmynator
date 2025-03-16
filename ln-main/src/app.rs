@@ -145,7 +145,11 @@ impl App {
             tokio::select! {
                 event = tui_event => {
                     if let Some(action) = event_to_action(self.mode, event.unwrap()) {
-                        self.handle_action(action);
+                        if matches!(action, Action::Render) {
+                            self.render(tui).unwrap();
+                        } else {
+                            self.handle_action(action);
+                        }
                     };
                 },
 

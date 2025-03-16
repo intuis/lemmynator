@@ -7,7 +7,7 @@ mod ui;
 use anyhow::Result;
 use app::App;
 use ln_config::Config;
-use tracing::{error, info, Level};
+use tracing::info;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
