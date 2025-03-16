@@ -17,7 +17,6 @@ use super::components::{tabs::TabComponent, Component};
 pub struct TopBar {
     pub tabs: TabComponent,
     pub unread_counts: GetUnreadCountResponse,
-    ctx: Arc<Ctx>,
 }
 
 impl TopBar {
@@ -25,7 +24,6 @@ impl TopBar {
         Self {
             tabs: TabComponent::new(Arc::clone(&ctx)),
             unread_counts,
-            ctx,
         }
     }
 

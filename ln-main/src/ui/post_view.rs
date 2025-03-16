@@ -9,7 +9,7 @@ use ratatui::{
     widgets::{block::Title, Block, Borders, Paragraph},
     Frame,
 };
-use ratatui_image::StatefulImage;
+use ratatui_image::{Resize, StatefulImage};
 
 use crate::{
     action::{Action, UpdateAction},
@@ -185,12 +185,12 @@ impl Component for PostView {
                     f.render_widget(
                         Block::new()
                             .borders(Borders::TOP)
-                            .title_top(self.post.footer())
-                            .title_alignment(Alignment::Right)
-                            .title(
-                                Title::from(format!("{} Comments ", self.post.border_separator()))
-                                    .alignment(Alignment::Left),
-                            ),
+                            .title_top(self.post.footer().right_aligned())
+                            .title(Title::from(format!(
+                                "{} Comments ",
+                                self.post.border_separator()
+                            )))
+                            .title_alignment(Alignment::Left),
                         comments_rect,
                     );
 

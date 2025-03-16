@@ -1,16 +1,15 @@
 use std::io::Cursor;
 use std::sync::{Arc, Mutex};
 
-use image::GenericImageView;
+use image::{GenericImageView, Rgba};
 use lemmy_api_common::lemmy_db_schema::newtypes::{CommunityId, PostId};
 use lemmy_api_common::lemmy_db_views::structs::PostView;
 use lemmy_api_common::post::CreatePostLike;
 use ln_config::CONFIG;
 use ratatui::prelude::*;
-use ratatui::widgets::block::{Position, Title};
 use ratatui::widgets::{Block, BorderType, Paragraph, Wrap};
 use ratatui_image::protocol::StatefulProtocol;
-use ratatui_image::StatefulImage;
+use ratatui_image::{Resize, StatefulImage};
 use text::ToSpan;
 
 use crate::action::Action;
@@ -271,8 +270,30 @@ impl Component for LemmynatorPost {
             .areas(inner_rect);
 
             if let Some(image) = &mut *self.image_data.lock().unwrap() {
-                let image_widget = StatefulImage::default();
-                f.render_stateful_widget(image_widget, image_rect, &mut image.image);
+                if let Some(needs_to_be_resized_to) =
+                    image.image.needs_resize(&Resize::default(), image_rect)
+                {
+                    let _image_data = Arc::clone(&self.image_data);
+                    let _ctx = Arc::clone(&self.ctx);
+                    let img_bg = image.image.background_color();
+                    tokio::task::spawn_blocking(move || {
+                        if let Some(image) = &mut *_image_data.lock().unwrap() {
+                            image.image.resize_encode(
+                                &Resize::default(),
+                                img_bg,
+                                needs_to_be_resized_to,
+                            );
+                            _ctx.send_action(Action::Render);
+                        }
+                    });
+
+                    image
+                        .image
+                        .resize_encode(&Resize::default(), img_bg, needs_to_be_resized_to);
+                } else {
+                    let image_widget = StatefulImage::default();
+                    f.render_stateful_widget(image_widget, image_rect, &mut image.image);
+                }
             } else {
                 desc_rect = inner_rect;
             }
@@ -312,12 +333,8 @@ impl LemmynatorPost {
                 BorderType::Rounded
             })
             .border_style(self.border_style())
-            .title(Title::from(self.header()).alignment(Alignment::Left))
-            .title(
-                Title::from(self.footer())
-                    .alignment(Alignment::Right)
-                    .position(Position::Bottom),
-            )
+            .title_top(self.header().left_aligned())
+            .title_bottom(self.footer().right_aligned())
     }
 
     fn border_style(&self) -> Style {
