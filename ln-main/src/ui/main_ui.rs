@@ -13,7 +13,6 @@ use super::{
 use anyhow::Result;
 use lemmy_api_common::{
     comment::{GetComments, GetCommentsResponse},
-    lemmy_db_schema::SortType,
     person::GetUnreadCountResponse,
 };
 use ratatui::prelude::*;
@@ -98,7 +97,7 @@ impl Component for MainWindow {
             }
             UpdateAction::CommentsForCurrentPost(comments) => {
                 if let Some(post_view) = &mut self.post_view {
-                    post_view.post.comments = Some(comments.comments);
+                    post_view.post.comments = Some(comments.comments.into());
                     self.ctx.send_action(Action::Render);
                 }
             }
@@ -106,6 +105,8 @@ impl Component for MainWindow {
                 let params = GetComments {
                     community_id: Some(post.community_id),
                     post_id: Some(post.id.clone()),
+                    max_depth: Some(8),
+                    limit: Some(100),
                     ..Default::default()
                 };
                 self.post_view = Some(PostView::new(post));

@@ -6,7 +6,7 @@ use lemmy_api_common::{
     post::GetPostsResponse,
 };
 
-use crate::{tui::Event, ui::listing::lemmynator_post::LemmynatorPost};
+use crate::{tui::Event, types::LemmynatorPost};
 
 #[derive(Clone)]
 pub enum UpdateAction {
@@ -32,7 +32,7 @@ pub enum Action {
     ChangeFocus,
     ChangeSort,
     ChangeTab(u8),
-    ChangeSubTab(char),
+    ChangeSubTab(u8),
     Input(KeyEvent),
 }
 
@@ -71,7 +71,9 @@ fn keycode_to_action(key: KeyEvent) -> Option<Action> {
         KeyCode::Char(n @ '1'..='3') => {
             Some(A::ChangeTab(n.to_digit(10).expect("This is ok") as u8))
         }
-        KeyCode::Char('!') => Some(A::ChangeSubTab('!')),
+        KeyCode::Char('!') => Some(A::ChangeSubTab(1)),
+        KeyCode::Char('@') => Some(A::ChangeSubTab(2)),
+        KeyCode::Char('#') => Some(A::ChangeSubTab(3)),
         KeyCode::Char('4') => Some(A::ChangeSort),
         KeyCode::Enter => Some(Action::Confirm),
         _ => None,
