@@ -1,7 +1,8 @@
+use std::cell::LazyCell;
 use std::io::Cursor;
 use std::sync::{Arc, Mutex};
 
-use image::{GenericImageView, Rgba};
+use image::{DynamicImage, GenericImageView};
 use lemmy_api_common::lemmy_db_schema::newtypes::{CommunityId, PostId};
 use lemmy_api_common::lemmy_db_views::structs::PostView;
 use lemmy_api_common::post::CreatePostLike;
@@ -10,6 +11,7 @@ use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Paragraph, Wrap};
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::{Resize, StatefulImage};
+use ratskin::RatSkin;
 use text::ToSpan;
 
 use crate::action::Action;
@@ -25,7 +27,7 @@ pub struct LemmynatorPost {
     pub name: String,
     pub body: String,
     pub is_focused: bool,
-    pub image_data: Arc<Mutex<Option<ImageData>>>,
+    pub image_data: Arc<Mutex<Option<ThreadImage>>>,
     embed_url: Option<url::Url>,
     pub author: String,
     pub community: String,
@@ -44,9 +46,42 @@ pub struct LemmynatorCounts {
     comments: i64,
 }
 
-pub struct ImageData {
-    pub image: StatefulProtocol,
+pub struct ThreadImage {
+    pub image: Arc<Mutex<StatefulProtocol>>,
     pub dimensions: (u32, u32),
+}
+
+impl ThreadImage {
+    pub fn new(image: DynamicImage) -> Self {
+        let dimensions = image.dimensions();
+        let image = PICKER.read().unwrap().new_resize_protocol(image);
+
+        ThreadImage {
+            image: Arc::new(Mutex::new(image)),
+            dimensions,
+        }
+    }
+
+    pub fn render(&mut self, f: &mut Frame, rect: Rect, ctx: Arc<Ctx>) {
+        let needs_to_be_resized_to = self
+            .image
+            .lock()
+            .unwrap()
+            .needs_resize(&Resize::default(), rect);
+
+        if let Some(needs_to_be_resized_to) = needs_to_be_resized_to {
+            let image = Arc::clone(&self.image);
+            tokio::task::spawn_blocking(move || {
+                let mut image = image.lock().unwrap();
+                let img_bg = image.background_color();
+                image.resize_encode(&Resize::default(), img_bg, needs_to_be_resized_to);
+                ctx.send_action(Action::Render);
+            });
+        } else {
+            let stateful_image = StatefulImage::default();
+            f.render_stateful_widget(stateful_image, rect, &mut self.image.lock().unwrap());
+        };
+    }
 }
 
 impl LemmynatorPost {
@@ -123,7 +158,7 @@ impl LemmynatorPost {
         self.body.is_empty() && self.image_data.lock().unwrap().is_some()
     }
 
-    async fn fetch_image(url: String, image: Arc<Mutex<Option<ImageData>>>, ctx: Arc<Ctx>) {
+    async fn fetch_image(url: String, image: Arc<Mutex<Option<ThreadImage>>>, ctx: Arc<Ctx>) {
         let new_image = {
             let res = ctx.client.get(url).send().await.unwrap();
             Some(res.bytes().await.unwrap())
@@ -135,10 +170,7 @@ impl LemmynatorPost {
                 .unwrap()
                 .decode();
             if let Ok(dyn_image) = dyn_image_res {
-                Some(ImageData {
-                    dimensions: dyn_image.dimensions(),
-                    image: PICKER.lock().unwrap().new_resize_protocol(dyn_image),
-                })
+                Some(ThreadImage::new(dyn_image))
             } else {
                 None
             }
@@ -212,30 +244,35 @@ impl LemmynatorPost {
     }
 
     pub fn desc_md_paragraph(&self, text_rect: Rect) -> Paragraph<'_> {
-        let mut md_header_encountered = false;
-        let body: Vec<_> = self
-            .body
-            .lines()
-            .flat_map(|line| {
-                if line.starts_with('#') {
-                    md_header_encountered = true;
-                    let trimmed_line = line[0..].trim_start_matches('#').trim_start();
-                    vec![Line::styled(trimmed_line, Style::new().bold())]
-                } else if md_header_encountered {
-                    let max_width = text_rect.width - 2;
-                    Self::wrap_line(line, max_width)
-                } else {
-                    vec![Line::from(
-                        Self::parse_markdown_url(line)
-                            .into_iter()
-                            .map(|markdown| Span::from(markdown))
-                            .collect::<Vec<_>>(),
-                    )]
-                }
-            })
-            .collect();
-        let body_paragraph = Paragraph::new(body).wrap(Wrap { trim: false });
-        body_paragraph
+        let rat_skin = RatSkin::default();
+        let text = RatSkin::parse_text(&self.body);
+        let lines = rat_skin.parse(text, text_rect.width - 2);
+        Paragraph::new(lines)
+
+        // let mut md_header_encountered = false;
+        // let body: Vec<_> = self
+        //     .body
+        //     .lines()
+        //     .flat_map(|line| {
+        //         if line.starts_with('#') {
+        //             md_header_encountered = true;
+        //             let trimmed_line = line[0..].trim_start_matches('#').trim_start();
+        //             vec![Line::styled(trimmed_line, Style::new().bold())]
+        //         } else if md_header_encountered {
+        //             let max_width = text_rect.width - 2;
+        //             Self::wrap_line(line, max_width)
+        //         } else {
+        //             vec![Line::from(
+        //                 Self::parse_markdown_url(line)
+        //                     .into_iter()
+        //                     .map(|markdown| Span::from(markdown))
+        //                     .collect::<Vec<_>>(),
+        //             )]
+        //         }
+        //     })
+        //     .collect();
+        // let body_paragraph = Paragraph::new(body).wrap(Wrap { trim: false });
+        // body_paragraph
     }
 }
 
@@ -270,30 +307,7 @@ impl Component for LemmynatorPost {
             .areas(inner_rect);
 
             if let Some(image) = &mut *self.image_data.lock().unwrap() {
-                if let Some(needs_to_be_resized_to) =
-                    image.image.needs_resize(&Resize::default(), image_rect)
-                {
-                    let _image_data = Arc::clone(&self.image_data);
-                    let _ctx = Arc::clone(&self.ctx);
-                    let img_bg = image.image.background_color();
-                    tokio::task::spawn_blocking(move || {
-                        if let Some(image) = &mut *_image_data.lock().unwrap() {
-                            image.image.resize_encode(
-                                &Resize::default(),
-                                img_bg,
-                                needs_to_be_resized_to,
-                            );
-                            _ctx.send_action(Action::Render);
-                        }
-                    });
-
-                    image
-                        .image
-                        .resize_encode(&Resize::default(), img_bg, needs_to_be_resized_to);
-                } else {
-                    let image_widget = StatefulImage::default();
-                    f.render_stateful_widget(image_widget, image_rect, &mut image.image);
-                }
+                image.render(f, image_rect, Arc::clone(&self.ctx));
             } else {
                 desc_rect = inner_rect;
             }
@@ -316,8 +330,7 @@ impl Component for LemmynatorPost {
             ])
             .areas(inner_rect);
             if let Some(image) = &mut *self.image_data.lock().unwrap() {
-                let image_state = StatefulImage::default();
-                f.render_stateful_widget(image_state, image_rect, &mut image.image);
+                image.render(f, image_rect, Arc::clone(&self.ctx));
             }
         }
     }
@@ -506,13 +519,13 @@ impl LemmynatorPost {
     }
 
     fn parse_markdown_url(text: &str) -> Vec<Markdown> {
+        let link_regex = LazyCell::new(|| regex::Regex::new(r"\[([^\]]+)\]\(([^)]+)\)").unwrap());
+        let bold_regex = LazyCell::new(|| regex::Regex::new(r"\*\*(.*?)\*\*").unwrap());
+        let italic_regex = LazyCell::new(|| regex::Regex::new(r"_(.*?)_").unwrap());
+
         if text.is_empty() {
             return vec![];
         }
-
-        let link_regex = regex::Regex::new(r"\[([^\]]+)\]\(([^)]+)\)").unwrap();
-        let bold_regex = regex::Regex::new(r"\*\*(.*?)\*\*").unwrap();
-        let italic_regex = regex::Regex::new(r"_(.*?)_").unwrap();
 
         let mut parsed_markdown = vec![];
 

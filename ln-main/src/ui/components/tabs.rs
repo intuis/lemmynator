@@ -53,7 +53,6 @@ impl Display for CurrentTab {
 }
 
 pub struct TabComponent {
-    tabs_sort: [&'static str; 5],
     pub tabs_state: TabsState<CurrentTab>,
     pub current_sort: SortType,
     ctx: Arc<Ctx>,
@@ -62,13 +61,6 @@ pub struct TabComponent {
 impl TabComponent {
     pub fn new(ctx: Arc<Ctx>) -> Self {
         Self {
-            tabs_sort: [
-                "!. Hot",
-                "@. Active",
-                "#. Scaled",
-                "$. Controversial",
-                "%. New",
-            ],
             current_sort: SortType::Hot,
             ctx,
             tabs_state: TabsState::new(vec![
@@ -95,17 +87,6 @@ impl TabComponent {
             SortType::New => self.current_sort = SortType::Hot,
             _ => unreachable!(),
         }
-    }
-}
-
-fn sort_type_index(sort_type: SortType) -> usize {
-    match sort_type {
-        SortType::Hot => 0,
-        SortType::Active => 1,
-        SortType::Scaled => 2,
-        SortType::Controversial => 3,
-        SortType::New => 4,
-        _ => unreachable!(),
     }
 }
 

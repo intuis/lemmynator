@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{fmt::Display, sync::Arc};
 
 use intui_tabs::{Tabs, TabsState};
 use ln_config::CONFIG;
@@ -9,7 +9,6 @@ use ratatui::{
     widgets::{block::Title, Block, Borders, Paragraph},
     Frame,
 };
-use ratatui_image::{Resize, StatefulImage};
 
 use crate::{
     action::{Action, UpdateAction},
@@ -152,9 +151,7 @@ impl Component for PostView {
                     body_rect = Some(image_body_rect);
                     comments_rect = Some(image_comments_rect);
 
-                    let image_state = StatefulImage::default();
-
-                    f.render_stateful_widget(image_state, image_rect, &mut image.image);
+                    image.render(f, image_rect, Arc::clone(&self.post.ctx));
                     f.render_widget(
                         Block::new().borders(Borders::TOP).title_top(format!(
                             "{} {} ",

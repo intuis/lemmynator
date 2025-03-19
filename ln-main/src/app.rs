@@ -1,7 +1,8 @@
 use std::{
     fs::File,
     io::{Read, Write},
-    sync::{Arc, LazyLock, Mutex},
+    sync::{Arc, LazyLock, RwLock},
+    time::Instant,
 };
 
 use crossterm::event::{KeyCode, KeyModifiers};
@@ -15,6 +16,7 @@ use reqwest::{
     header::{HeaderMap, HeaderValue},
     Client,
 };
+use tracing::info;
 
 use crate::{
     action::{event_to_action, Action, Mode, UpdateAction},
@@ -25,8 +27,8 @@ use crate::{
 use anyhow::Result;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
-pub static PICKER: LazyLock<Mutex<Picker>> =
-    LazyLock::new(|| Mutex::new(Picker::from_query_stdio().unwrap()));
+pub static PICKER: LazyLock<RwLock<Picker>> =
+    LazyLock::new(|| RwLock::new(Picker::from_query_stdio().unwrap()));
 
 pub struct AppKeyEvent(crossterm::event::KeyEvent);
 
@@ -222,9 +224,11 @@ impl App {
     }
 
     fn render(&mut self, tui: &mut Tui) -> Result<()> {
+        let time = Instant::now();
         tui.terminal.draw(|f| {
             self.main_window.render(f, f.area());
         })?;
+        info!("Rendering took {:?}", Instant::now().duration_since(time));
         Ok(())
     }
 

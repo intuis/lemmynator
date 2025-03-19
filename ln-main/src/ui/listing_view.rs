@@ -74,5 +74,5 @@ impl Component for ListingView {
         }
     }
 
-    fn render(&mut self, f: &mut ratatui::Frame, _rect: ratatui::prelude::Rect) {}
+    fn render(&mut self, _f: &mut ratatui::Frame, _rect: ratatui::prelude::Rect) {}
 }

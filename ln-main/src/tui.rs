@@ -76,7 +76,7 @@ impl Tui {
                 }
             }
             Some(Ok(CrosstermEvent::Resize(_, _))) => {
-                *PICKER.lock().unwrap() = Picker::from_query_stdio().unwrap();
+                *PICKER.write().unwrap() = Picker::from_query_stdio().unwrap();
                 event_tx.send(Event::Render).unwrap();
             }
             Some(Err(_)) => event_tx.send(Event::Error).unwrap(),

@@ -222,15 +222,13 @@ impl<'a> LemmynatorPostCommentsWidget<'a> {
 struct LemmynatorCommentWidget<'a> {
     comment: &'a LemmynatorComment,
     left_side_width: u16,
-    ctx: Arc<app::Ctx>,
 }
 
 impl<'a> LemmynatorCommentWidget<'a> {
-    fn new(comment: &'a LemmynatorComment, left_side_width: u16, ctx: Arc<app::Ctx>) -> Self {
+    fn new(comment: &'a LemmynatorComment, left_side_width: u16) -> Self {
         Self {
             comment,
             left_side_width,
-            ctx,
         }
     }
 }
@@ -252,7 +250,7 @@ impl<'a> Component for LemmynatorCommentWidget<'a> {
         let new_image = avatar_image_lock.take().and_then(|image| match image {
             CommentImage::StatelessImage(image, is_default) => Some(CommentImage::StatefulImage(
                 (image.width(), image.height()),
-                PICKER.lock().unwrap().new_resize_protocol(image),
+                PICKER.read().unwrap().new_resize_protocol(image),
                 is_default,
             )),
             CommentImage::StatefulImage(res, image, is_default) => {
@@ -295,7 +293,7 @@ impl<'a> Component for LemmynatorCommentWidget<'a> {
                 let image_rect = ImageSource::round_pixel_size_to_cells(
                     res.0,
                     res.1,
-                    PICKER.lock().unwrap().font_size(),
+                    PICKER.read().unwrap().font_size(),
                 );
 
                 let new_dims = fit_area_proportionally(
@@ -351,8 +349,7 @@ impl<'a> Component for LemmynatorPostCommentsWidget<'a> {
 
             info!("This is the comment rect: {:?}", comment_rect);
 
-            LemmynatorCommentWidget::new(&comment, self.left_side_width, self.ctx.clone())
-                .render(f, comment_rect);
+            LemmynatorCommentWidget::new(&comment, self.left_side_width).render(f, comment_rect);
 
             if !comment.replies.is_empty() {
                 let comment_reply = comment.replies.iter().nth(0).unwrap().1;
@@ -383,12 +380,8 @@ impl<'a> Component for LemmynatorPostCommentsWidget<'a> {
 
                 info!("This is the reply rect: {:?}", reply_rect);
 
-                LemmynatorCommentWidget::new(
-                    &comment_reply,
-                    self.left_side_width,
-                    self.ctx.clone(),
-                )
-                .render(f, reply_rect);
+                LemmynatorCommentWidget::new(&comment_reply, self.left_side_width)
+                    .render(f, reply_rect);
             }
         }
     }

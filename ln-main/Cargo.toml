@@ -30,6 +30,7 @@ futures = "0.3"
 crossterm = { version = "0.28", features = ["event-stream"] }
 ratatui = { version = "0.29", features = ["serde"] }
 ratatui-image = "4.1.3"
+ratskin = "0.2.0"
 tui-input = "0.11"
 intui-tabs = "0.4.0"
 tui-scrollview = "0.5"
