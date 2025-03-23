@@ -1,5 +1,6 @@
 <img align="left" width="100" height="100" src="https://github.com/user-attachments/assets/57aa5eaa-3d7a-4038-9ece-c3ebd9ca46d2">
 
+
 **Lemmynator**
 
 Performant TUI for Lemmy that looks cool and one that might become your daily-driver one day.  
@@ -7,7 +8,7 @@ Currently it's still in early development, but it's getting there.
 
 # 
 <div align="center">
-    <img src="https://github.com/user-attachments/assets/52301f5c-0cbb-40a0-9ef7-e457e684bf76"/>
+    <img src="https://github.com/user-attachments/assets/24871f8f-449f-41b2-b4b9-a3236cf986bd"/>
     <p>
         <small>Posts shown here were chosen randomly</small>
     </p>
