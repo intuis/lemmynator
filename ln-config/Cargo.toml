@@ -3,6 +3,9 @@ name = "ln-config"
 version = "0.2.0"
 edition = "2021"
 description = "Config library for lemmynator"
+repository = "https://github.com/intuis/lemmynator"
+homepage = "https://github.com/intuis/lemmynator"
+license = "GPL-3.0-or-later"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
