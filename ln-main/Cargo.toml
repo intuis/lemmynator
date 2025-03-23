@@ -10,7 +10,7 @@ license = "GPL-3.0-or-later"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-ln-config = { path = "../ln-config" }
+ln-config = { version = "0.2.1", path = "../ln-config" }
 
 anyhow = "1"
 tracing = "0.1.41"
