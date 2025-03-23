@@ -1,11 +1,16 @@
 use std::{
     fs::File,
-    io::{Read, Write},
+    io::{stdout, Read, Write},
+    panic::{set_hook, take_hook},
     sync::{Arc, LazyLock, RwLock},
-    time::Instant,
 };
 
-use crossterm::event::{KeyCode, KeyModifiers};
+use crossterm::{
+    cursor::Show,
+    event::{DisableMouseCapture, KeyCode, KeyModifiers},
+    execute,
+    terminal::{disable_raw_mode, LeaveAlternateScreen},
+};
 use lemmy_api_common::{
     lemmy_db_schema::sensitive::SensitiveString,
     person::{Login, LoginResponse},
@@ -16,7 +21,6 @@ use reqwest::{
     header::{HeaderMap, HeaderValue},
     Client,
 };
-use tracing::info;
 
 use crate::{
     action::{event_to_action, Action, Mode, UpdateAction},
@@ -174,6 +178,13 @@ impl App {
     pub async fn run(&mut self) -> Result<()> {
         let mut tui = Tui::new()?;
 
+        let original_hook = take_hook();
+        set_hook(Box::new(move |panic_info| {
+            let _ = disable_raw_mode();
+            let _ = execute!(stdout(), LeaveAlternateScreen, Show, DisableMouseCapture);
+            original_hook(panic_info);
+        }));
+
         tui.enter()?;
 
         self.render(&mut tui)?;
@@ -224,11 +235,9 @@ impl App {
     }
 
     fn render(&mut self, tui: &mut Tui) -> Result<()> {
-        let time = Instant::now();
         tui.terminal.draw(|f| {
             self.main_window.render(f, f.area());
         })?;
-        info!("Rendering took {:?}", Instant::now().duration_since(time));
         Ok(())
     }
 

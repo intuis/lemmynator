@@ -1,2 +1,7 @@
 [connection]
 instance = "lemmy.ml"
+# username = "YOUR_USERNAME"
+# password = "YOUR_PASSWORD"
+
+[general]
+accent_color = "LightGreen"

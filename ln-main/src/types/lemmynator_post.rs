@@ -1,4 +1,3 @@
-use std::cell::LazyCell;
 use std::io::Cursor;
 use std::sync::{Arc, Mutex};
 
@@ -8,7 +7,7 @@ use lemmy_api_common::lemmy_db_views::structs::PostView;
 use lemmy_api_common::post::CreatePostLike;
 use ln_config::CONFIG;
 use ratatui::prelude::*;
-use ratatui::widgets::{Block, BorderType, Paragraph, Wrap};
+use ratatui::widgets::{Block, BorderType, Paragraph};
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::{Resize, StatefulImage};
 use ratskin::RatSkin;
@@ -73,8 +72,7 @@ impl ThreadImage {
             let image = Arc::clone(&self.image);
             tokio::task::spawn_blocking(move || {
                 let mut image = image.lock().unwrap();
-                let img_bg = image.background_color();
-                image.resize_encode(&Resize::default(), img_bg, needs_to_be_resized_to);
+                image.resize_encode(&Resize::default(), needs_to_be_resized_to);
                 ctx.send_action(Action::Render);
             });
         } else {
@@ -489,97 +487,5 @@ impl LemmynatorPost {
         };
 
         Line::default().spans(spans)
-    }
-
-    fn wrap_line(line: &str, max_width: u16) -> Vec<Line> {
-        let mut wrapped_lines = Vec::new();
-        let mut current_line = String::with_capacity(max_width as usize + 2);
-        let mut count = 0;
-
-        for ch in line.chars() {
-            if count == 0 {
-                current_line.push_str("  ");
-                count += 2;
-            }
-
-            if count < max_width {
-                current_line.push(ch);
-                count += 1;
-            } else {
-                wrapped_lines.push(Line::from(current_line.clone()));
-                current_line.clear();
-                count = 0;
-            }
-        }
-
-        if !current_line.is_empty() {
-            wrapped_lines.push(Line::from(current_line));
-        }
-        wrapped_lines
-    }
-
-    fn parse_markdown_url(text: &str) -> Vec<Markdown> {
-        let link_regex = LazyCell::new(|| regex::Regex::new(r"\[([^\]]+)\]\(([^)]+)\)").unwrap());
-        let bold_regex = LazyCell::new(|| regex::Regex::new(r"\*\*(.*?)\*\*").unwrap());
-        let italic_regex = LazyCell::new(|| regex::Regex::new(r"_(.*?)_").unwrap());
-
-        if text.is_empty() {
-            return vec![];
-        }
-
-        let mut parsed_markdown = vec![];
-
-        if let Some(capture) = link_regex.captures(text) {
-            let full_match = capture.get(0).unwrap();
-            let link_text = capture.get(1).unwrap().as_str();
-            // TODO: implement when unstable widget ref is stable and create hyperlink widget with this
-            // let url = capture.get(2).unwrap().as_str();
-
-            parsed_markdown.append(&mut Self::parse_markdown_url(&text[..full_match.start()]));
-            parsed_markdown.push(Markdown::Url(link_text.to_string()));
-            parsed_markdown.append(&mut Self::parse_markdown_url(&text[full_match.end()..]));
-            return parsed_markdown;
-        };
-
-        if let Some(capture) = bold_regex.captures(text) {
-            let full_match = capture.get(0).unwrap();
-            let bold_text = capture.get(1).unwrap().as_str();
-
-            parsed_markdown.append(&mut Self::parse_markdown_url(&text[..full_match.start()]));
-            parsed_markdown.push(Markdown::Bold(bold_text.to_string()));
-            parsed_markdown.append(&mut Self::parse_markdown_url(&text[full_match.end()..]));
-            return parsed_markdown;
-        };
-
-        if let Some(capture) = italic_regex.captures(text) {
-            let full_match = capture.get(0).unwrap();
-            let italic_text = capture.get(1).unwrap().as_str();
-
-            parsed_markdown.append(&mut Self::parse_markdown_url(&text[..full_match.start()]));
-            parsed_markdown.push(Markdown::Italic(italic_text.to_string()));
-            parsed_markdown.append(&mut Self::parse_markdown_url(&text[full_match.end()..]));
-            return parsed_markdown;
-        };
-
-        parsed_markdown.push(Markdown::Text(text.to_string()));
-        parsed_markdown
-    }
-}
-
-enum Markdown {
-    Url(String),
-    Bold(String),
-    Italic(String),
-    Text(String),
-}
-
-impl From<Markdown> for Span<'_> {
-    fn from(value: Markdown) -> Self {
-        match value {
-            Markdown::Url(url) => Span::styled(url, Style::new().fg(Color::LightBlue).underlined()),
-            Markdown::Bold(text) => Span::styled(text, Style::new().bold()),
-            Markdown::Italic(text) => Span::styled(text, Style::new().italic()),
-            Markdown::Text(text) => Span::raw(text),
-        }
     }
 }

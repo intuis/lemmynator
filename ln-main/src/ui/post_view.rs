@@ -9,6 +9,7 @@ use ratatui::{
     widgets::{block::Title, Block, Borders, Paragraph},
     Frame,
 };
+use ratatui_image::Resize;
 
 use crate::{
     action::{Action, UpdateAction},
@@ -106,7 +107,21 @@ impl Component for PostView {
                     .underlined()
                     .fg(CONFIG.general.accent_color),
             ),
-            Span::raw(" to go back."),
+            Span::raw(" to go back, "),
+            Span::styled(
+                "j",
+                Style::default()
+                    .underlined()
+                    .fg(CONFIG.general.accent_color),
+            ),
+            Span::raw("/"),
+            Span::styled(
+                "k",
+                Style::default()
+                    .underlined()
+                    .fg(CONFIG.general.accent_color),
+            ),
+            Span::raw(" to resize the image."),
         ];
 
         let how_to_quit = Paragraph::new(Line::from(spans));
@@ -137,7 +152,7 @@ impl Component for PostView {
                     count
                 };
                 if let Some(image) = &mut *self.post.image_data.lock().unwrap() {
-                    let [_, image_rect, _, image_body_rect, _, image_comments_rect] =
+                    let [_, image_rect, _, mut image_body_rect, _, mut image_comments_rect] =
                         Layout::vertical([
                             Constraint::Length(3),
                             Constraint::Percentage(50 + self.zoom_amount),
@@ -147,6 +162,20 @@ impl Component for PostView {
                             Constraint::Percentage(50 - self.zoom_amount),
                         ])
                         .areas(rect);
+
+                    let image_rect_will_render_to = image
+                        .image
+                        .lock()
+                        .unwrap()
+                        .size_for(&Resize::default(), image_rect);
+
+                    if image_rect_will_render_to.area() < image_rect.area() {
+                        let height_freed = image_rect.height - image_rect_will_render_to.height;
+                        image_comments_rect.height += height_freed;
+                        image_comments_rect.y -= height_freed;
+                        image_body_rect.height += height_freed;
+                        image_body_rect.y -= height_freed;
+                    }
 
                     body_rect = Some(image_body_rect);
                     comments_rect = Some(image_comments_rect);

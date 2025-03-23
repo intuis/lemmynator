@@ -333,21 +333,11 @@ impl<'a> Component for LemmynatorPostCommentsWidget<'a> {
             });
 
             if comment_height as u16 >= lines_left {
-                info!(
-                    "Skipping comment with height of {} (there are {} lines left).",
-                    comment_height, lines_left,
-                );
                 continue;
             } else {
-                info!(
-                    "Rendering Comment with height of {}, there are {} lines left",
-                    comment_height, lines_left
-                );
                 lines_left -= comment_height as u16;
             }
             comment_rect.height = comment_height as u16;
-
-            info!("This is the comment rect: {:?}", comment_rect);
 
             LemmynatorCommentWidget::new(&comment, self.left_side_width).render(f, comment_rect);
 

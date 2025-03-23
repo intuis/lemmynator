@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use lemmy_api_common::lemmy_db_views::structs::PaginationCursor;
+use ln_config::CONFIG;
 use ratatui::{prelude::*, widgets::Paragraph};
 
 use crate::{
@@ -128,11 +129,32 @@ impl Page {
             + 1
     }
 
-    pub fn render_bottom_bar(&mut self, f: &mut Frame, rect: Rect) {
+    pub fn render_bottom_bar(&mut self, f: &mut Frame, mut rect: Rect) {
+        let spans = vec![
+            Span::raw(" 󰋗 Press "),
+            Span::styled(
+                "J",
+                Style::default()
+                    .underlined()
+                    .fg(CONFIG.general.accent_color),
+            ),
+            Span::raw("/"),
+            Span::styled(
+                "K",
+                Style::default()
+                    .underlined()
+                    .fg(CONFIG.general.accent_color),
+            ),
+            Span::raw(" to downvote/upvote."),
+        ];
+
         if self.currently_displaying != 0 {
             let current_page_paragraph =
                 Paragraph::new(format!("{} / ", self.current_page())).alignment(Alignment::Center);
             f.render_widget(current_page_paragraph, rect);
+            let keytip_paragraph = Paragraph::new(Line::from(spans)).left_aligned();
+            rect.x = 0;
+            f.render_widget(keytip_paragraph, rect);
         }
     }
 }

@@ -22,9 +22,3 @@ async fn main() -> Result<()> {
 
     Ok(())
 }
-
-// async fn run_tui() -> Result<()> {
-//     let app = App::new().await?;
-//     app.run().await?;
-//     Ok(())
-// }
