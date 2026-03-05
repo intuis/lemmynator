@@ -1489,7 +1489,7 @@ dependencies = [
 
 [[package]]
 name = "lemmynator"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "bytes",
@@ -1555,7 +1555,7 @@ checksum = "643cb0b8d4fcc284004d5fd0d67ccf61dfffadb7f75e1e71bc420f4688a3a704"
 
 [[package]]
 name = "ln-config"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "ratatui",

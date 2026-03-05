@@ -336,7 +336,7 @@ impl Component for LemmynatorPost {
 
 // UI render related things
 impl LemmynatorPost {
-    fn post_block(&self) -> Block {
+    fn post_block(&self) -> Block<'_> {
         Block::bordered()
             .border_type(if self.is_focused {
                 BorderType::Thick
@@ -372,7 +372,7 @@ impl LemmynatorPost {
         }
     }
 
-    pub fn footer(&self) -> Line {
+    pub fn footer(&self) -> Line<'_> {
         let (upvote_span_style, downvote_span_style) = {
             if let Some(my_vote) = self.my_vote {
                 if my_vote == 1 {
@@ -420,7 +420,7 @@ impl LemmynatorPost {
         line
     }
 
-    fn header(&self) -> Line {
+    fn header(&self) -> Line<'_> {
         let mut spans = vec![];
 
         if self.is_focused {

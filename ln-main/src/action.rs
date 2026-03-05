@@ -16,7 +16,7 @@ pub enum UpdateAction {
     UpdateUnreadsCount(GetUnreadCountResponse),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Action {
     Quit,
     ForceQuit,
@@ -42,7 +42,7 @@ impl Action {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
     Input,
     Normal,

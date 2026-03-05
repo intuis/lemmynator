@@ -32,7 +32,7 @@ impl TopBar {
         unread_counts.replies + unread_counts.mentions + unread_counts.private_messages
     }
 
-    fn menu_text(&self) -> Line {
+    fn menu_text(&self) -> Line<'_> {
         let total_unreads = self.total_unreads();
         let mut spans = vec![];
 

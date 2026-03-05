@@ -24,7 +24,7 @@ use reqwest::{
 
 use crate::{
     action::{event_to_action, Action, Mode, UpdateAction},
-    tui::Tui,
+    tui::{Event, Tui},
     ui::{components::Component, main_ui::MainWindow},
 };
 
@@ -65,12 +65,6 @@ impl AppKeyEvent {
             _ => (self.0.code, self.0.modifiers),
         }
     }
-
-    // fn to_action(&self, current_window: CurrentWindow) -> Option<Action> {}
-}
-
-enum CurrentWindow {
-    Feed,
 }
 
 pub struct App {
@@ -202,13 +196,25 @@ impl App {
 
             tokio::select! {
                 event = tui_event => {
-                    if let Some(action) = event_to_action(self.mode, event.unwrap()) {
-                        if matches!(action, Action::Render) {
-                            self.render(tui).unwrap();
-                        } else {
-                            self.handle_action(action);
-                        }
-                    };
+                    let event = event.unwrap();
+                    match event {
+                        Event::Key(key_event) => {
+                            let app_key_event = AppKeyEvent::from(key_event);
+                            if app_key_event.is_ctrl_c() {
+                                self.should_quit = true;
+                            } else if self.mode == Mode::Input {
+                                self.handle_action(Action::Input(key_event));
+                            } else if let Some(action) = event_to_action(self.mode, event) {
+                                if action == Action::Render {
+                                    self.render(tui).unwrap();
+                                } else {
+                                    self.handle_action(action);
+                                }
+                            }
+                        },
+                        Event::Error => todo!(),
+                        Event::Render => todo!(),
+                    }
                 },
 
                 action = action => {
