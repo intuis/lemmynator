@@ -1,5 +1,6 @@
 mod action;
 mod app;
+mod app_key_event;
 mod tui;
 pub mod types;
 mod ui;
